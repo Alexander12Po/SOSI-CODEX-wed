@@ -1,0 +1,21 @@
+{
+  "name": "zenbot",
+  "version": "1.0.0",
+  "description": "Bot de WhatsApp básico con Baileys",
+  "type": "module",
+  "main": "zen.js",
+  "scripts": {
+    "start": "node zen.js"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "latest",
+    "axios": "^1.6.8",
+    "dotenv": "^16.6.1",
+    "mongoose": "^9.7.4",
+    "node-cache": "^5.1.2",
+    "node-fetch": "^3.3.2",
+    "pino": "^8.0.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
