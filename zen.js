@@ -9,12 +9,21 @@ import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import readline from 'readline'
 import qrcode from 'qrcode-terminal'
+import QRCode from 'qrcode'
 import NodeCache from 'node-cache'
 import { handler } from './handler.js'
 import { botConfig } from './config.js'
 import { handleGroupParticipantsUpdate } from './plugins/bienvenida.js'
 import { cachearMensaje, manejarMensajeEliminado } from './plugins/antidelete.js'
 import { useMongoAuthState } from './mongoAuthState.js'
+
+// -----------------------------------------------------------------------
+// El QR en ASCII dentro de los Logs de Render es casi imposible de
+// escanear desde el celular (se ve pixelado y chiquito). Por eso además
+// de imprimirlo en los logs, lo guardamos como imagen y lo servimos en
+// la ruta /qr, para que lo abras en el navegador y lo escanees nítido.
+// -----------------------------------------------------------------------
+let ultimoQR = null
 
 // -----------------------------------------------------------------------
 // Render (plan free) apaga cualquier Web Service que no reciba tráfico
@@ -25,7 +34,25 @@ import { useMongoAuthState } from './mongoAuthState.js'
 // vea inactivo. Render inyecta el puerto correcto en process.env.PORT.
 // -----------------------------------------------------------------------
 const PORT = process.env.PORT || 3000
-http.createServer((req, res) => {
+http.createServer(async (req, res) => {
+  if (req.url === '/qr') {
+    if (!ultimoQR) {
+      res.writeHead(200, { 'Content-Type': 'text/html' })
+      return res.end('<h2>Todavía no hay QR generado, o el bot ya está conectado. Refresca en unos segundos.</h2>')
+    }
+    const dataUrl = await QRCode.toDataURL(ultimoQR, { width: 300 })
+    res.writeHead(200, { 'Content-Type': 'text/html' })
+    return res.end(`
+      <html>
+        <body style="display:flex;flex-direction:column;align-items:center;font-family:sans-serif;margin-top:40px">
+          <h3>Escanea con WhatsApp &gt; Dispositivos vinculados</h3>
+          <img src="${dataUrl}" width="300" height="300" />
+          <p>Se actualiza solo. Si expira, refresca la página.</p>
+          <script>setTimeout(() => location.reload(), 15000)</script>
+        </body>
+      </html>
+    `)
+  }
   res.writeHead(200, { 'Content-Type': 'text/plain' })
   res.end('SOSI CODEX activo ✅')
 }).listen(PORT, () => {
@@ -89,7 +116,9 @@ async function startBot() {
     const { connection, lastDisconnect, qr } = update
 
     if (!usePairing && qr) {
+      ultimoQR = qr
       console.log('📲 Escanea este código QR con WhatsApp > Dispositivos vinculados:')
+      console.log(`🌐 O ábrelo como imagen en: (tu URL de Render)/qr`)
       qrcode.generate(qr, { small: true })
     }
 
