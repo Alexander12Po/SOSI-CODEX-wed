@@ -1,7 +1,7 @@
 import 'dotenv/config'
+import http from 'http'
 import {
   makeWASocket,
-  useMultiFileAuthState,
   fetchLatestWaWebVersion,
   DisconnectReason
 } from '@whiskeysockets/baileys'
@@ -14,10 +14,25 @@ import { handler } from './handler.js'
 import { botConfig } from './config.js'
 import { handleGroupParticipantsUpdate } from './plugins/bienvenida.js'
 import { cachearMensaje, manejarMensajeEliminado } from './plugins/antidelete.js'
+import { useMongoAuthState } from './mongoAuthState.js'
+
+// -----------------------------------------------------------------------
+// Render (plan free) apaga cualquier Web Service que no reciba tráfico
+// HTTP durante 15 minutos. El bot de WhatsApp no recibe tráfico HTTP por
+// sí mismo, así que abrimos un servidor mínimo que responde "OK" a
+// cualquier petición. Un servicio externo (cron-job.org, UptimeRobot,
+// etc.) le pega a esta URL cada 10-14 minutos para que Render nunca lo
+// vea inactivo. Render inyecta el puerto correcto en process.env.PORT.
+// -----------------------------------------------------------------------
+const PORT = process.env.PORT || 3000
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' })
+  res.end('SOSI CODEX activo ✅')
+}).listen(PORT, () => {
+  console.log(`🌐 Servidor keep-alive escuchando en el puerto ${PORT}`)
+})
 
 // --- BLINDAJE GLOBAL: evita que errores no capturados tumben el bot ---
-// Sin esto, un solo error (ej: una descarga de imagen que falla a medias)
-// puede matar TODO el proceso de Node y forzar un reinicio completo del bot.
 process.on('uncaughtException', (err) => {
   console.error('⚠️ Error no capturado (uncaughtException):', err)
 })
@@ -36,16 +51,16 @@ const question = (text) => new Promise((resolve) => {
 })
 
 async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState('./session')
+  // 👇 Antes: useMultiFileAuthState('./session') — se perdía en cada
+  // redeploy de Render porque el disco es efímero.
+  // Ahora: la sesión se lee/escribe directamente en MongoDB, así que
+  // sobrevive a reinicios y redeploys.
+  const { state, saveCreds } = await useMongoAuthState()
 
-  // 👇 Usamos fetchLatestWaWebVersion en vez de fetchLatestBaileysVersion:
-  // esta última tiene actualmente un bug conocido que devuelve una versión
-  // vieja de WhatsApp Web, lo que hace que la vinculación falle (error 428).
   const { version } = await fetchLatestWaWebVersion()
 
   const usePairing = botConfig.loginMethod === 'pairing'
 
-  // Cache de metadatos de grupo, para evitar consultas repetidas que causan demora
   const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false })
 
   const sock = makeWASocket({
@@ -60,7 +75,12 @@ async function startBot() {
   let phoneNumber = null
 
   if (usePairing && !sock.authState.creds.registered) {
-    phoneNumber = (await question('Ingresa tu número con código de país (ej: 521234567890): ')).trim()
+    // En Render no hay terminal interactiva para escribir el número a mano.
+    // Si definiste PAIRING_NUMBER como variable de entorno, se usa esa.
+    // Si no existe (por ejemplo corriendo local), se pregunta por consola.
+    phoneNumber = process.env.PAIRING_NUMBER
+      ? process.env.PAIRING_NUMBER.trim()
+      : (await question('Ingresa tu número con código de país (ej: 521234567890): ')).trim()
   }
 
   sock.ev.on('creds.update', saveCreds)
@@ -68,13 +88,11 @@ async function startBot() {
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
-    // Método QR
     if (!usePairing && qr) {
       console.log('📲 Escanea este código QR con WhatsApp > Dispositivos vinculados:')
       qrcode.generate(qr, { small: true })
     }
 
-    // Método código de vinculación (se pide justo cuando el socket ya está listo)
     if (usePairing && phoneNumber && !pairingRequested && (connection === 'connecting' || qr)) {
       pairingRequested = true
       try {
@@ -93,7 +111,7 @@ async function startBot() {
       const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut
       console.log('❌ Conexión cerrada. Código:', statusCode, '| Motivo:', lastDisconnect?.error?.message || lastDisconnect?.error)
-      console.log(shouldReconnect ? 'Reconectando...' : 'Sesión cerrada, borra la carpeta session y vuelve a vincular.')
+      console.log(shouldReconnect ? 'Reconectando...' : 'Sesión cerrada, se necesita vincular de nuevo.')
       if (shouldReconnect) startBot()
     } else if (connection === 'open') {
       console.log(`✅ ${botConfig.botName} conectado correctamente`)
@@ -107,16 +125,11 @@ async function startBot() {
     if (!msg?.message) return
 
     try {
-      // Si es un mensaje de "eliminar" (Eliminar para todos), intentamos
-      // recuperar la copia guardada en cache y reenviarla.
       if (msg.message.protocolMessage?.type === 0 /* REVOKE */) {
         await manejarMensajeEliminado(sock, msg)
         return
       }
 
-      // Guardamos copia del mensaje por si luego lo eliminan.
-      // NO esperamos a que termine (es solo para el antidelete, no debe
-      // retrasar la respuesta del comando que el usuario está pidiendo).
       cachearMensaje(msg).catch((err) => console.error('Error cacheando mensaje:', err.message))
 
       await handler(sock, m)
@@ -125,7 +138,6 @@ async function startBot() {
     }
   })
 
-  // Evento para detectar nuevos participantes y enviar la bienvenida
   sock.ev.on('group-participants.update', async (update) => {
     try {
       await handleGroupParticipantsUpdate(sock, update)
