@@ -17,7 +17,9 @@ function normalizarJid(jid) {
   return numero + '@s.whatsapp.net';
 }
 
+console.log('🔎 [handler.js] Conectando a MongoDB...');
 await connectDB();
+console.log('🔎 [handler.js] MongoDB OK. Iniciando carga de plugins...');
 
 const comandosLibres = ['registrar', 'menu', 'help', 'credito', 'perfil', 'comprar', 'addcredito', 'setcredito', 'listausuarios', 'usuarios', 'verusuario', 'bienvenida', 'cmds', 'consultas', 'vv', 'viewonce', 'iaon', 'iaoff'];
 
@@ -25,9 +27,13 @@ export const plugins = new Map();
 
 async function loadPlugins() {
   const files = fs.readdirSync(pluginsPath).filter(f => f.endsWith('.js'));
+  console.log(`🔎 [handler.js] Encontrados ${files.length} archivos en /plugins:`, files);
+
   for (const file of files) {
+    console.log(`🔎 [handler.js] Cargando "${file}"...`);
     try {
       const module = await import(`./plugins/${file}`);
+      console.log(`✅ [handler.js] "${file}" cargado correctamente.`);
       const plugin = module.default;
       if (!plugin || typeof plugin.exec !== 'function') continue;
 
@@ -42,6 +48,8 @@ async function loadPlugins() {
       console.log(`⚠️ Error cargando "${file}":`, err.message);
     }
   }
+
+  console.log('🔎 [handler.js] Todos los plugins procesados.');
 }
 
 export function getUniquePlugins() {
@@ -57,6 +65,7 @@ export function getUniquePlugins() {
 }
 
 await loadPlugins();
+console.log('🔎 [handler.js] loadPlugins() terminó. handler.js listo para exportarse.');
 
 export async function handler(sock, m) {
   const msg = m.messages[0];
