@@ -7,7 +7,13 @@ import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import QRCode from 'qrcode'
 import { useMongoAuthState } from './mongoAuthState.js'
-import { handler } from './handler.js'
+// 👇 NO se importa handler.js de forma estática aquí. handler.js carga
+// los plugins (incluido conectar.js, que depende de este archivo), así
+// que un import estático crea un ciclo: handler.js -> conectar.js ->
+// sessionManager.js -> handler.js, y Node se queda esperando en círculo
+// sin arrancar nunca (el bot se cuelga sin dar ningún error).
+// La solución es importar handler.js dinámicamente, ya dentro del
+// listener de mensajes, cuando el módulo ya terminó de cargar.
 
 // -----------------------------------------------------------------------
 // Administra varias sesiones de Baileys al mismo tiempo, cada una
@@ -83,6 +89,7 @@ async function createSession(sessionId, { onQR, onOpen } = {}) {
     if (!msg?.message) return
 
     try {
+      const { handler } = await import('./handler.js')
       await handler(sock, m)
     } catch (err) {
       console.error(`Error en handler de sesión ${sessionId}:`, err)
