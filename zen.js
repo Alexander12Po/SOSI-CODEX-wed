@@ -15,7 +15,8 @@ import { handler } from './handler.js'
 import { botConfig } from './config.js'
 import { handleGroupParticipantsUpdate } from './plugins/bienvenida.js'
 import { cachearMensaje, manejarMensajeEliminado } from './plugins/antidelete.js'
-import { useMongoAuthState } from './mongoAuthState.js'
+import { useMongoAuthState, listRegisteredSessions } from './mongoAuthState.js'
+import { restoreAllSessions } from './sessionManager.js'
 
 // -----------------------------------------------------------------------
 // El QR en ASCII dentro de los Logs de Render es casi imposible de
@@ -177,3 +178,11 @@ async function startBot() {
 }
 
 startBot()
+
+// -----------------------------------------------------------------------
+// Al arrancar, además de conectar el bot principal (arriba), reconecta
+// automáticamente todas las sesiones de sub-usuarios que se hayan
+// vinculado antes con ".conectar", para que sobrevivan a un redeploy
+// de Render sin pedirles escanear el QR otra vez.
+// -----------------------------------------------------------------------
+restoreAllSessions(listRegisteredSessions)
