@@ -75,7 +75,10 @@ async function createSession(sessionId, { onQR, onOpen } = {}) {
           console.error(`Error reconectando sesión ${sessionId}:`, err)
         )
       } else {
-        console.log(`🔒 [Sesión ${sessionId}] Cerró sesión (logout). No se reconecta.`)
+        console.log(`🔒 [Sesión ${sessionId}] Cerró sesión (logout). Borrando de Mongo para evitar reconexiones fantasma.`)
+        const { clearMongoAuthState, unregisterSession } = await import('./mongoAuthState.js')
+        await clearMongoAuthState(sessionId)
+        await unregisterSession(sessionId)
       }
     } else if (connection === 'open') {
       console.log(`✅ [Sesión ${sessionId}] conectada correctamente`)
