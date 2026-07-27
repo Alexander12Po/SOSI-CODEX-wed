@@ -177,12 +177,9 @@ async function startBot() {
   })
 }
 
+// Espera un poco a que el bot principal se estabilice antes de
+// intentar restaurar las sesiones de sub-usuarios, para evitar conflictos.
 startBot()
-
-// -----------------------------------------------------------------------
-// Al arrancar, además de conectar el bot principal (arriba), reconecta
-// automáticamente todas las sesiones de sub-usuarios que se hayan
-// vinculado antes con ".conectar", para que sobrevivan a un redeploy
-// de Render sin pedirles escanear el QR otra vez.
-// -----------------------------------------------------------------------
-restoreAllSessions(listRegisteredSessions)
+setTimeout(() => {
+  restoreAllSessions(listRegisteredSessions)
+}, 5000)
