@@ -10,16 +10,15 @@ export default {
 
     const metadata = await sock.groupMetadata(from);
     const botId = sock.user.id.split(':')[0]; // Tu número sin @
-    const botJid = botId + '@s.whatsapp.net';
 
-    // 🔍 DEBUG - quitar después de diagnosticar
-    console.log('sock.user.id:', sock.user.id);
-    console.log('participantes:', JSON.stringify(metadata.participants, null, 2));
+    // Helper: obtiene el número real de un participante (soporta @lid y @s.whatsapp.net)
+    const getNumero = (p) =>
+      p.phoneNumber ? p.phoneNumber.split('@')[0] : p.id.split('@')[0].split(':')[0];
 
     // Verificar que TÚ (el número del bot) seas admin del grupo
     const tuEresAdmin = metadata.participants.some(p => {
-      const participantId = p.id.split('@')[0].split(':')[0];
-      return participantId === botId && (p.admin === 'admin' || p.admin === 'superadmin');
+      const numero = getNumero(p);
+      return numero === botId && (p.admin === 'admin' || p.admin === 'superadmin');
     });
 
     if (!tuEresAdmin) {
@@ -30,11 +29,12 @@ export default {
 
     // Lista de participantes, excluyendo al bot y a los admins reales
     const participantes = metadata.participants
-      .map(p => p.id)
-      .filter(id =>
-        id !== botJid &&
-        !metadata.participants.find(p => p.id === id && (p.admin === 'admin' || p.admin === 'superadmin'))
-      );
+      .filter(p => {
+        const numero = getNumero(p);
+        const esAdmin = p.admin === 'admin' || p.admin === 'superadmin';
+        return numero !== botId && !esAdmin;
+      })
+      .map(p => p.id); // para remove() se usa el id (puede ser @lid o @s.whatsapp.net)
 
     await sock.sendMessage(from, {
       text: `⚠️ Iniciando purga de *${participantes.length}* miembros. Esto tomará aproximadamente ${Math.ceil((participantes.length / 20) * 0.5)} segundos...`
