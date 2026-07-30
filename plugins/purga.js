@@ -9,16 +9,18 @@ export default {
     }
 
     const metadata = await sock.groupMetadata(from);
+    const botId = sock.user.id.split(':')[0]; // Tu número sin @
+    const botJid = botId + '@s.whatsapp.net';
 
-    // Verificar que el bot sea admin del grupo
-    const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-    const botEsAdmin = metadata.participants.some(
-      p => p.id.split('@')[0] === botJid.split('@')[0] && (p.admin === 'admin' || p.admin === 'superadmin')
-    );
+    // Verificar que TÚ (el número del bot) seas admin del grupo
+    const tuEresAdmin = metadata.participants.some(p => {
+      const participantId = p.id.split('@')[0].split(':')[0];
+      return participantId === botId && (p.admin === 'admin' || p.admin === 'superadmin');
+    });
 
-    if (!botEsAdmin) {
+    if (!tuEresAdmin) {
       return sock.sendMessage(from, {
-        text: '❌ El bot necesita ser administrador del grupo para hacer esto.'
+        text: '❌ Necesitas ser administrador del grupo para usar este comando.'
       }, { quoted: msg });
     }
 
