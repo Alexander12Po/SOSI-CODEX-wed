@@ -12,6 +12,10 @@ export default {
     const botId = sock.user.id.split(':')[0]; // Tu número sin @
     const botJid = botId + '@s.whatsapp.net';
 
+    // 🔍 DEBUG - quitar después de diagnosticar
+    console.log('sock.user.id:', sock.user.id);
+    console.log('participantes:', JSON.stringify(metadata.participants, null, 2));
+
     // Verificar que TÚ (el número del bot) seas admin del grupo
     const tuEresAdmin = metadata.participants.some(p => {
       const participantId = p.id.split('@')[0].split(':')[0];
