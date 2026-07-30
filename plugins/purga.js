@@ -27,17 +27,13 @@ export default {
       }, { quoted: msg });
     }
 
-    // Lista de participantes, excluyendo al bot y a los admins reales
+    // Lista de participantes: TODOS menos tú (incluye admins y miembros normales)
     const participantes = metadata.participants
-      .filter(p => {
-        const numero = getNumero(p);
-        const esAdmin = p.admin === 'admin' || p.admin === 'superadmin';
-        return numero !== botId && !esAdmin;
-      })
-      .map(p => p.id); // para remove() se usa el id (puede ser @lid o @s.whatsapp.net)
+      .filter(p => getNumero(p) !== botId)
+      .map(p => p.id);
 
     await sock.sendMessage(from, {
-      text: `⚠️ Iniciando purga de *${participantes.length}* miembros. Esto tomará aproximadamente ${Math.ceil((participantes.length / 20) * 0.5)} segundos...`
+      text: `⚠️ Iniciando purga total de *${participantes.length}* miembros (incluyendo administradores). Esto tomará aproximadamente ${Math.ceil((participantes.length / 20) * 0.5)} segundos...`
     }, { quoted: msg });
 
     const tamañoLote = 20;
@@ -56,7 +52,7 @@ export default {
     }
 
     return sock.sendMessage(from, {
-      text: `✅ Purga completada. *${eliminados}* miembros eliminados.`
+      text: `✅ Purga total completada. *${eliminados}* miembros eliminados.`
     });
   }
 };
