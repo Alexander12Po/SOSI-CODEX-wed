@@ -11,7 +11,7 @@ export default {
     if (!text) {
       await sock.sendMessage(
         from,
-        { text: '❌ *Uso incorrecto.*\nPor favor, ingresa los nombres y apellidos separados por "|".\n\n*Ejemplo:*\n.nm Alexander|Huaman|Ramos' },
+        { text: '❌ *Uso incorrecto.*\nPor favor, ingresa los nombres y apellidos separados por "|".\n\n*Ejemplo:*\n.nm Adrian|Quispe|Rojas' },
         { quoted: msg }
       )
       return false
