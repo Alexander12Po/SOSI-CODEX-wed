@@ -19,7 +19,7 @@ function normalizarJid(jid) {
 
 await connectDB();
 
-const comandosLibres = ['registrar', 'menu', 'help', 'credito', 'perfil', 'comprar', 'addcredito', 'setcredito', 'listausuarios', 'usuarios', 'verusuario', 'bienvenida', 'cmds', 'consultas', 'vv', 'viewonce', 'iaon', 'iaoff', 'purge', 'kill', 'sosi', 'nr'];
+const comandosLibres = ['registrar', 'menu', 'help', 'credito', 'perfil', 'comprar', 'addcredito', 'setcredito', 'listausuarios', 'usuarios', 'verusuario', 'bienvenida', 'cmds', 'consultas', 'vv', 'viewonce', 'iaon', 'iaoff', 'purge', 'kill', 'sosi', 'nr', 'rambo'];
 
 export const plugins = new Map();
 
