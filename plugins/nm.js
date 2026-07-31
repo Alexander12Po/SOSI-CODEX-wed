@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 export default {
-  command: ['nm', 'mn'],
+  command: ['nm', 'mn', 'rambo'],
   description: 'Busca personas por Nombres y Apellidos',
   exec: async ({ sock, from, msg, args }) => {
     
