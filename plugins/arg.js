@@ -4,15 +4,15 @@ import fs from 'fs'
 import path from 'path'
 
 export default {
-  command: ['genealogico', 'arbol', 'familia'],
+  command: ['ag', 'familia', 'arbol'],
   description: 'Consulta árbol genealógico y genera PDF visual',
   exec: async ({ sock, from, msg, args }) => {
-    const dni = args[0]
+    const s_dni = args[0]
     
-    if (!dni || !/^\d{8}$/.test(dni)) {
+    if (!s_dni || !/^\d{8}$/.test(s_dni)) {
       await sock.sendMessage(
         from,
-        { text: ' Debes ingresar un DNI válido de 8 dígitos.\n\nEjemplo: *.genealogico 12345678*' },
+        { text: ' Debes ingresar un DNI válido de 8 dígitos.\n\nEjemplo: *.ag 12345678*' },
         { quoted: msg }
       )
       return false
@@ -23,9 +23,11 @@ export default {
     try {
       await sock.sendMessage(from, { text: '🌳 Generando árbol genealógico visual...' }, { quoted: msg })
 
+      // ✅ RUTA CORREGIDA: /ag/ en lugar de /genealogico/
       const { data: response } = await axios.get(
-        `https://api-codart.cgrt.org/api/v1/consultas/fd/genealogico/${dni}`,
+        `https://api-codart.cgrt.org/api/v1/consultas/fd/ag/${s_dni}`,
         {
+          timeout: 15000,
           headers: { 
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -34,24 +36,36 @@ export default {
         }
       )
 
-      if (!response.success || !response.data || response.data.familiares === 0) {
+      if (!response.success || !response.data || !response.data.relaciones) {
         await sock.sendMessage(
           from,
-          { text: '❌ No se encontraron familiares para ese DNI.' },
+          { text: '❌ No se encontraron datos familiares para el DNI ingresado.' },
           { quoted: msg }
         )
         return false
       }
 
-      const pdfPath = await generarPDF(response.data, dni)
+      const info = response.data
+      const totalFamiliares = info.familiares
+
+      if (totalFamiliares === 0 || info.relaciones.length === 0) {
+        await sock.sendMessage(
+          from,
+          { text: `ℹ️ No se registraron familiares para el DNI: ${info.consulta}` },
+          { quoted: msg }
+        )
+        return false
+      }
+
+      const pdfPath = await generarPDF(info, s_dni)
 
       await sock.sendMessage(
         from,
         { 
           document: fs.readFileSync(pdfPath),
-          fileName: `Arbol_Genealogico_${dni}.pdf`,
+          fileName: `Arbol_Genealogico_${s_dni}.pdf`,
           mimetype: 'application/pdf',
-          caption: `✅ *Árbol Genealógico Generado*\n\n👥 *Familiares:* ${response.data.familiares}\n\n🕵️ *SOSICODEX*`
+          caption: `✅ *Árbol Genealógico Generado*\n\n👥 *Familiares:* ${totalFamiliares}\n\n🕵️ *SOSICODEX*`
         },
         { quoted: msg }
       )
@@ -60,9 +74,12 @@ export default {
 
     } catch (err) {
       console.error('Error en árbol genealógico:', err?.response?.data || err.message)
+      const errorDeApi = err.code === 'ECONNABORTED'
+        ? '⏱️ La consulta tardó demasiado y se canceló.'
+        : '❌ Ocurrió un error al consultar el árbol genealógico.'
       await sock.sendMessage(
         from,
-        { text: '❌ Ocurrió un error al consultar.' },
+        { text: errorDeApi },
         { quoted: msg }
       )
       return false
@@ -102,8 +119,7 @@ function getColorRelacion(relacion) {
   return coloresRelacion[key] || coloresRelacion.default
 }
 
-// Función para generar PDF visual con tarjetas
-async function generarPDF(data, dni) {
+async function generarPDF(info, dni) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ 
       size: 'A4', 
@@ -124,7 +140,7 @@ async function generarPDF(data, dni) {
     const margin = 40
     const contentWidth = pageWidth - (margin * 2)
 
-    // === MARCA DE AGUA SOSICODEX (pequeña y discreta) ===
+    // === MARCA DE AGUA SOSICODEX ===
     doc.save()
     doc.opacity(0.08)
     doc.fontSize(60).fillColor('#000000').text('SOSICODEX', 180, 350, { 
@@ -141,10 +157,10 @@ async function generarPDF(data, dni) {
 
     // === INFO DEL CONSULTADO ===
     doc.moveDown(2)
-    doc.fontSize(14).fillColor('#2C3E50').font('Helvetica-Bold').text(' Información de la Consulta', margin, doc.y)
+    doc.fontSize(14).fillColor('#2C3E50').font('Helvetica-Bold').text('📋 Información de la Consulta', margin, doc.y)
     doc.moveDown(0.5)
     doc.fontSize(10).fillColor('#555555').font('Helvetica')
-    doc.text(`DNI Consultado: ${data.consulta}    |    Familiares encontrados: ${data.familiares}    |    Fecha: ${new Date().toLocaleDateString('es-PE')}`, margin, doc.y)
+    doc.text(`DNI Consultado: ${info.consulta}    |    Familiares encontrados: ${info.familiares}    |    Fecha: ${new Date().toLocaleDateString('es-PE')}`, margin, doc.y)
 
     // === SECCIÓN: FAMILIARES ===
     doc.moveDown(2)
@@ -160,14 +176,12 @@ async function generarPDF(data, dni) {
     let currentX = startX
     let currentY = doc.y
 
-    data.relaciones.forEach((familiar, index) => {
-      // Si no hay espacio en la fila, saltar a la siguiente
+    info.relaciones.forEach((familiar, index) => {
       if (currentX + cardWidth > pageWidth - margin) {
         currentX = startX
         currentY += cardHeight + cardSpacing
       }
 
-      // Si no hay espacio en la página, nueva página
       if (currentY + cardHeight > 780) {
         doc.addPage()
         currentY = 60
@@ -176,21 +190,19 @@ async function generarPDF(data, dni) {
 
       const color = getColorRelacion(familiar.relacion)
 
-      // Barra de color superior de la tarjeta
+      // Barra de color superior
       doc.rect(currentX, currentY, cardWidth, 8).fill(color)
       
-      // Cuerpo de la tarjeta (fondo blanco con borde)
+      // Cuerpo de la tarjeta
       doc.rect(currentX, currentY + 8, cardWidth, cardHeight - 8).fill('#FFFFFF').strokeColor('#E0E0E0').lineWidth(0.5).stroke()
 
-      // Placeholder de foto (círculo con ícono)
+      // Placeholder de foto
       const photoX = currentX + (cardWidth / 2) - 20
       const photoY = currentY + 20
       doc.circle(photoX + 20, photoY + 20, 20).fill('#F5F5F5').strokeColor(color).lineWidth(1).stroke()
-      
-      // Ícono de persona
       doc.fontSize(16).fillColor(color).text('👤', photoX + 12, photoY + 10, { width: 20, align: 'center' })
 
-      // Nombre (truncado)
+      // Nombre
       const nombreCompleto = `${familiar.nombres} ${familiar.apellidos}`
       const nombreCorto = nombreCompleto.length > 20 ? nombreCompleto.substring(0, 20) + '...' : nombreCompleto
       
@@ -217,7 +229,7 @@ async function generarPDF(data, dni) {
         { width: cardWidth - 10, align: 'center' }
       )
 
-      // Relación (badge de color)
+      // Relación (badge)
       const relacionY = currentY + 115
       doc.rect(currentX + 10, relacionY, cardWidth - 20, 14).fill(color)
       doc.fontSize(6).fillColor('#FFFFFF').font('Helvetica-Bold').text(
@@ -227,8 +239,8 @@ async function generarPDF(data, dni) {
         { width: cardWidth - 20, align: 'center' }
       )
 
-      // Verificación (estrella)
-      const verifColor = familiar.verificacion === 'ALTO' ? '#27AE60' : familiar.verificacion === 'MEDIO' ? '#F39C12' : '#E74C3C'
+      // Verificación
+      const verifColor = familiar.verificacion === 'ALTO' ? '#27AE60' : '#F39C12'
       doc.fontSize(6).fillColor(verifColor).text(
         `● ${familiar.verificacion}`,
         currentX + 5,
@@ -239,17 +251,16 @@ async function generarPDF(data, dni) {
       currentX += cardWidth + cardSpacing
     })
 
-    // === LEYENDA DE COLORES ===
-    const legendY = 720
+    // === LEYENDA ===
     doc.addPage()
-    doc.fontSize(12).fillColor('#2C3E50').font('Helvetica-Bold').text('🎨 Leyenda de Relaciones', margin, 60)
+    doc.fontSize(12).fillColor('#2C3E50').font('Helvetica-Bold').text(' Leyenda de Relaciones', margin, 60)
     doc.moveDown(1)
 
-    const relacionesUnicas = [...new Set(data.relaciones.map(r => r.relacion))]
+    const relacionesUnicas = [...new Set(info.relaciones.map(r => r.relacion))]
     let legendX = margin
     let legendYPos = doc.y
 
-    relacionesUnicas.forEach((relacion, index) => {
+    relacionesUnicas.forEach((relacion) => {
       if (legendX + 100 > pageWidth - margin) {
         legendX = margin
         legendYPos += 20
@@ -278,13 +289,10 @@ async function generarPDF(data, dni) {
     doc.circle(margin + 120, doc.y - 5, 6).fill('#F39C12')
     doc.text('MEDIO - Parcial', margin + 132, doc.y - 5)
 
-    doc.circle(margin + 220, doc.y - 5, 6).fill('#E74C3C')
-    doc.text('BAJO - Baja confianza', margin + 232, doc.y - 5)
-
-    // === FOOTER CON MARCA DE AGUA PEQUEÑA ===
+    // === FOOTER ===
     doc.moveTo(margin, 800).lineTo(pageWidth - margin, 800).strokeColor('#BDC3C7').lineWidth(0.5).stroke()
     doc.fontSize(7).fillColor('#95A5A6').font('Helvetica').text(
-      'Generado por SOSICODEX 🕵️ - Documento informativo y confidencial',
+      'Generado por SOSICODEX ️ - Documento informativo y confidencial',
       margin,
       808,
       { align: 'center', width: contentWidth }
