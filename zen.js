@@ -27,6 +27,17 @@ import { restoreAllSessions } from './sessionManager.js'
 let ultimoQR = null
 
 // -----------------------------------------------------------------------
+// Contador de reconexiones fallidas seguidas. Si Baileys no detecta un
+// logout "limpio" (401) pero las credenciales igual están inválidas
+// (por ejemplo, sesión vinculada a otro WhatsApp, o error 515/428 en
+// loop), el bot se queda reconectando infinitamente sin nunca borrar
+// Mongo. Con este contador, si falla muchas veces seguidas en poco
+// tiempo, forzamos el borrado y pedimos QR nuevo automáticamente.
+// -----------------------------------------------------------------------
+let intentosFallidosSeguidos = 0
+const MAX_INTENTOS_ANTES_DE_RESET = 5
+
+// -----------------------------------------------------------------------
 // Render (plan free) apaga cualquier Web Service que no reciba tráfico
 // HTTP durante 15 minutos. El bot de WhatsApp no recibe tráfico HTTP por
 // sí mismo, así que abrimos un servidor mínimo que responde "OK" a
@@ -36,6 +47,16 @@ let ultimoQR = null
 // -----------------------------------------------------------------------
 const PORT = process.env.PORT || 3000
 http.createServer(async (req, res) => {
+  if (req.url === '/reset-session') {
+    await clearMongoAuthState('main')
+    ultimoQR = null
+    intentosFallidosSeguidos = 0
+    res.writeHead(200, { 'Content-Type': 'text/plain' })
+    res.end('✅ Sesión borrada de Mongo. El bot generará un QR nuevo en unos segundos, revisa /qr')
+    console.log('🗑️ Sesión "main" borrada manualmente vía /reset-session')
+    return
+  }
+
   if (req.url === '/qr') {
     if (!ultimoQR) {
       res.writeHead(200, { 'Content-Type': 'text/html' })
@@ -143,16 +164,28 @@ async function startBot() {
       console.log('❌ Conexión cerrada. Código:', statusCode, '| Motivo:', lastDisconnect?.error?.message || lastDisconnect?.error)
 
       if (shouldReconnect) {
-        console.log('Reconectando...')
+        intentosFallidosSeguidos++
+        console.log(`Reconectando... (intento fallido ${intentosFallidosSeguidos}/${MAX_INTENTOS_ANTES_DE_RESET})`)
+
+        if (intentosFallidosSeguidos >= MAX_INTENTOS_ANTES_DE_RESET) {
+          console.log('⚠️ Demasiados intentos fallidos seguidos. Las credenciales guardadas parecen inválidas.')
+          console.log('Borrando sesión de Mongo automáticamente y generando QR nuevo...')
+          ultimoQR = null
+          intentosFallidosSeguidos = 0
+          await clearMongoAuthState('main')
+        }
+
         startBot()
       } else {
         console.log('Sesión cerrada, borrando credenciales viejas y generando QR nuevo...')
         ultimoQR = null
+        intentosFallidosSeguidos = 0
         await clearMongoAuthState('main')
         startBot()
       }
     } else if (connection === 'open') {
       console.log(`✅ ${botConfig.botName} conectado correctamente`)
+      intentosFallidosSeguidos = 0
     }
   })
 
