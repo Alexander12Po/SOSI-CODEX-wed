@@ -1,4 +1,3 @@
-
 import { getOrCreateSession, getActiveSessionIds } from '../sessionManager.js'
 import { registerSession } from '../mongoAuthState.js'
 
@@ -8,6 +7,8 @@ export default {
   command: ['conectar', 'vincular'],
   cost: 0,
   exec: async ({ sock, msg, from, sender }) => {
+    console.log('DEBUG sender:', sender) // 👈 temporal, para diagnosticar el bug del sessionId
+
     const sessionId = sender.split('@')[0]
     const activeIds = getActiveSessionIds()
 
