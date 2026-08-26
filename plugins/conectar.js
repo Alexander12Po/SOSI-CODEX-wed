@@ -1,3 +1,4 @@
+
 import { getOrCreateSession, getActiveSessionIds } from '../sessionManager.js'
 import { registerSession } from '../mongoAuthState.js'
 
@@ -26,8 +27,13 @@ export default {
 
     await registerSession(sessionId)
 
+    let qrEnviado = false // evita enviar más de un QR
+
     await getOrCreateSession(sessionId, {
       onQR: async (dataUrl) => {
+        if (qrEnviado) return
+        qrEnviado = true
+
         const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '')
         const buffer = Buffer.from(base64Data, 'base64')
         await sock.sendMessage(from, {
