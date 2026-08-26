@@ -89,6 +89,11 @@ async function createSession(sessionId, { onQR, onOpen } = {}) {
     if (connection === 'close') {
       const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode
       const loggedOut = statusCode === DisconnectReason.loggedOut
+      // Justo después de escanear el QR con éxito, Baileys cierra la
+      // conexión a propósito con este código y hay que reabrirla para
+      // terminar de establecer el vínculo. No es un fallo: es el flujo
+      // normal de pairing.
+      const restartRequired = statusCode === DisconnectReason.restartRequired
       const entry = activeSessions.get(sessionId)
       const yaEstuvoConectada = entry?.connected === true
 
@@ -100,9 +105,10 @@ async function createSession(sessionId, { onQR, onOpen } = {}) {
         const { clearMongoAuthState, unregisterSession } = await import('./mongoAuthState.js')
         await clearMongoAuthState(sessionId)
         await unregisterSession(sessionId)
-      } else if (yaEstuvoConectada) {
-        // Ya estaba autenticada (por ejemplo se cayó la red): reconectar
-        // sola, sin pedir un QR nuevo.
+      } else if (restartRequired || yaEstuvoConectada) {
+        // Vínculo recién escaneado (515) o sesión que ya estaba
+        // autenticada y se cayó (ej. por red): reconectar sola, sin
+        // pedir un QR nuevo.
         createSession(sessionId, { onQR, onOpen }).catch(err =>
           console.error(`Error reconectando sesión ${sessionId}:`, err)
         )
