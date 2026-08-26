@@ -7,8 +7,6 @@ export default {
   command: ['conectar', 'vincular'],
   cost: 0,
   exec: async ({ sock, msg, from, sender }) => {
-    console.log('DEBUG sender:', sender) // 👈 temporal, para diagnosticar el bug del sessionId
-
     const sessionId = sender.split('@')[0]
     const activeIds = getActiveSessionIds()
 
@@ -26,8 +24,6 @@ export default {
 
     await sock.sendMessage(from, { text: '⏳ Generando tu código QR, espera un momento...' }, { quoted: msg })
 
-    await registerSession(sessionId)
-
     let qrEnviado = false // evita enviar más de un QR
 
     await getOrCreateSession(sessionId, {
@@ -43,6 +39,10 @@ export default {
         }, { quoted: msg })
       },
       onOpen: async () => {
+        // Solo se registra como sesión "persistente" una vez que
+        // realmente se conectó — así restoreAllSessions nunca vuelve a
+        // intentar revivir intentos fallidos o QRs no escaneados.
+        await registerSession(sessionId)
         await sock.sendMessage(from, { text: '✅ ¡Tu sesión quedó conectada correctamente! Ya puedes usar el bot desde tu propio número.' })
       }
     })
