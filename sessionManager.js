@@ -20,20 +20,28 @@ import { useMongoAuthState } from './mongoAuthState.js'
 // identificada por un sessionId (en la práctica, el número del usuario
 // que escribió ".conectar"). Cada sesión tiene su propio auth guardado
 // en Mongo (ver mongoAuthState.js) y su propio manejador de mensajes.
+//
+// Cada entrada guarda { sock, connected }: `connected` solo pasa a true
+// cuando el evento 'open' se dispara (es decir, cuando el QR fue
+// escaneado y la sesión quedó autenticada). Esto es clave para no
+// confundir "existe un socket" con "está realmente conectado".
 // -----------------------------------------------------------------------
 
-const activeSessions = new Map() // sessionId -> sock
+const activeSessions = new Map() // sessionId -> { sock, connected }
 
+// Solo cuenta como "activa" una sesión que llegó a autenticarse de verdad.
 export function getActiveSessionIds() {
-  return [...activeSessions.keys()]
+  return [...activeSessions.entries()]
+    .filter(([, entry]) => entry.connected)
+    .map(([sessionId]) => sessionId)
 }
 
 export function getSession(sessionId) {
-  return activeSessions.get(sessionId)
+  return activeSessions.get(sessionId)?.sock
 }
 
 export async function getOrCreateSession(sessionId, callbacks = {}) {
-  if (activeSessions.has(sessionId)) return activeSessions.get(sessionId)
+  if (activeSessions.has(sessionId)) return activeSessions.get(sessionId).sock
   return createSession(sessionId, callbacks)
 }
 
@@ -48,7 +56,7 @@ async function createSession(sessionId, { onQR, onOpen } = {}) {
     browser: ['SOSI CODEX', 'Chrome', '1.0.0']
   })
 
-  activeSessions.set(sessionId, sock)
+  activeSessions.set(sessionId, { sock, connected: false })
 
   sock.ev.on('creds.update', saveCreds)
 
@@ -66,21 +74,33 @@ async function createSession(sessionId, { onQR, onOpen } = {}) {
 
     if (connection === 'close') {
       const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut
+      const loggedOut = statusCode === DisconnectReason.loggedOut
+      const entry = activeSessions.get(sessionId)
+      const yaEstuvoConectada = entry?.connected === true
+
       console.log(`❌ [Sesión ${sessionId}] Conexión cerrada. Código: ${statusCode}`)
       activeSessions.delete(sessionId)
 
-      if (shouldReconnect) {
-        createSession(sessionId, { onQR, onOpen }).catch(err =>
-          console.error(`Error reconectando sesión ${sessionId}:`, err)
-        )
-      } else {
+      if (loggedOut) {
         console.log(`🔒 [Sesión ${sessionId}] Cerró sesión (logout). Borrando de Mongo para evitar reconexiones fantasma.`)
         const { clearMongoAuthState, unregisterSession } = await import('./mongoAuthState.js')
         await clearMongoAuthState(sessionId)
         await unregisterSession(sessionId)
+      } else if (yaEstuvoConectada) {
+        // Ya estaba autenticada (por ejemplo se cayó la red): reconectar
+        // sola, sin pedir un QR nuevo.
+        createSession(sessionId, { onQR, onOpen }).catch(err =>
+          console.error(`Error reconectando sesión ${sessionId}:`, err)
+        )
+      } else {
+        // Nunca llegó a conectarse (el QR expiró sin ser escaneado).
+        // No reintentamos solos: dejamos que el usuario ejecute
+        // .conectar de nuevo, tal como se le indicó.
+        console.log(`⌛ [Sesión ${sessionId}] El QR expiró sin escanear. El usuario debe ejecutar .conectar de nuevo.`)
       }
     } else if (connection === 'open') {
+      const entry = activeSessions.get(sessionId)
+      if (entry) entry.connected = true
       console.log(`✅ [Sesión ${sessionId}] conectada correctamente`)
       if (onOpen) onOpen()
     }
