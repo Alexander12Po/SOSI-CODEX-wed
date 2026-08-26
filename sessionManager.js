@@ -41,7 +41,21 @@ export function getSession(sessionId) {
 }
 
 export async function getOrCreateSession(sessionId, callbacks = {}) {
-  if (activeSessions.has(sessionId)) return activeSessions.get(sessionId).sock
+  const existing = activeSessions.get(sessionId)
+
+  if (existing) {
+    if (existing.connected) return existing.sock
+
+    // Hay un socket pendiente para este sessionId (por ejemplo, uno que
+    // restoreAllSessions creó sin onQR al arrancar el bot, o un intento
+    // previo que nunca se conectó). Como ahora sí hay alguien esperando
+    // un QR real, lo descartamos y arrancamos uno limpio con los
+    // callbacks actuales — si no, el QR se generaría para un socket que
+    // nadie está escuchando.
+    try { existing.sock.end(new Error('Reemplazado por un nuevo intento de conexión')) } catch {}
+    activeSessions.delete(sessionId)
+  }
+
   return createSession(sessionId, callbacks)
 }
 
@@ -95,8 +109,14 @@ async function createSession(sessionId, { onQR, onOpen } = {}) {
       } else {
         // Nunca llegó a conectarse (el QR expiró sin ser escaneado).
         // No reintentamos solos: dejamos que el usuario ejecute
-        // .conectar de nuevo, tal como se le indicó.
+        // .conectar de nuevo, tal como se le indicó. También la
+        // desregistramos, para que restoreAllSessions no la vuelva a
+        // intentar reconectar sola en cada reinicio (eso era lo que
+        // generaba sesiones "fantasma" chocando con intentos reales).
         console.log(`⌛ [Sesión ${sessionId}] El QR expiró sin escanear. El usuario debe ejecutar .conectar de nuevo.`)
+        const { clearMongoAuthState, unregisterSession } = await import('./mongoAuthState.js')
+        await clearMongoAuthState(sessionId)
+        await unregisterSession(sessionId)
       }
     } else if (connection === 'open') {
       const entry = activeSessions.get(sessionId)
