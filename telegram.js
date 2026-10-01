@@ -28,13 +28,17 @@ function limpiarTextoTelegram(texto) {
   for (let linea of lineas) {
     const lineaTrim = linea.trim()
     
-    // 1. Eliminar líneas de créditos o "Wanted for"
-    if (lineaTrim.startsWith('Credits') || lineaTrim.startsWith('Wanted for')) {
+    // 1. Eliminar líneas de créditos o "Wanted for" (detecta con o sin asteriscos **)
+    if (lineaTrim.includes('Credits') || lineaTrim.includes('Wanted for')) {
       continue
     }
     
-    // 2. Si la línea contiene el encabezado antiguo, la reemplazamos por completo
-    // Esto funciona sin importar si tiene asteriscos **, backticks ` o corchetes
+    // 2. Eliminar línea de LEGEND (emojis)
+    if (lineaTrim.includes('LEGEND')) {
+      continue
+    }
+    
+    // 3. Reemplazar el encabezado de LEDERDATA por SOSI_CODEX
     if (linea.includes('LEDERDATA.NET')) {
       lineasLimpias.push('[★SOSI_CODEX] → RENIEC ONLINE [PREMIUM]')
     } else {
@@ -55,6 +59,7 @@ async function consultarInterno(comando) {
   let ultimo = Date.now()
   let timeoutId = null
   
+  // ✅ Usar Promises en lugar de while(true) para no bloquear WhatsApp
   const respuestaPromise = new Promise((resolve) => {
     const handler = (evento) => {
       mensajes.push(evento.message)
@@ -88,7 +93,7 @@ async function consultarInterno(comando) {
     
     if (m.photo) {
       item.tipo = 'imagen'
-      item.buffer = await tg.downloadMedia(m)
+      item.buffer = await tg.downloadMedia(m) // ✅ Sin parámetros extra
     } else if (m.document) {
       item.tipo = 'documento'
       item.buffer = await tg.downloadMedia(m)
