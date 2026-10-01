@@ -5,32 +5,43 @@ export default {
   cost: 0,
   exec: async ({ sock, msg, from, args }) => {
     const valor = args.join(' ').trim()
-
+    
+    // ✅ Validación con formato profesional
     if (!valor) {
-      await sock.sendMessage(from, { text: '⚠️ Usa el comando así: *.noticias <país o código>*.' }, { quoted: msg })
+      await sock.sendMessage(from, { 
+        text: '⚠️ *Formato incorrecto*\n\nUsa el comando de la siguiente manera:\n👉 *.dni <número>*' 
+      }, { quoted: msg })
       return false
     }
-
-    // 👇 Ajusta este formato si el bot de Telegram espera el valor distinto
-    //    (ej. con tilde, con mayúscula, pegado al comando, etc.)
+    
     const comandoTelegram = `/dni ${valor}`
-
-    await sock.sendMessage(from, { text: `🕵️ Consultando dni de *${valor}*, espera un momento...` }, { quoted: msg })
-
+    
+    // ✅ Mensaje de carga profesional y elegante
+    await sock.sendMessage(from, { 
+      text: `🛡️ *SOSI CODEX* | Consultando registros de *${valor}*...\n⏳ Por favor, espere un momento.` 
+    }, { quoted: msg })
+    
     let salida
     try {
       salida = await consultarTelegram(comandoTelegram)
     } catch (err) {
       console.error('Error consultando, verifique su conexión (dni):', err)
-      await sock.sendMessage(from, { text: '❌ No se pudo conectar con el servicio de sosi. Intenta de nuevo en un momento.' }, { quoted: msg })
+      // ✅ Mensaje de error profesional
+      await sock.sendMessage(from, { 
+        text: '❌ *Error de conexión*\n\nNo se pudo comunicar con el servicio. Por favor, intenta de nuevo en unos momentos.' 
+      }, { quoted: msg })
       return false
     }
-
+    
+    // ✅ Mensaje de sin resultados profesional
     if (!salida.length) {
-      await sock.sendMessage(from, { text: `⚠️ No hubo respuesta para "${valor}". Revisa que esté bien escrito o intenta más tarde.` }, { quoted: msg })
+      await sock.sendMessage(from, { 
+        text: `⚠️ *Sin resultados*\n\nNo se encontró información para el DNI *${valor}*. Verifica que el número sea correcto o intenta más tarde.` 
+      }, { quoted: msg })
       return false
     }
-
+    
+    // Envía el resultado limpio (gracias a la función en telegram.js)
     await enviarResultadoWhatsApp(sock, from, salida)
   }
 }
