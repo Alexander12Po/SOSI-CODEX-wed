@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 export default {
-  command: ['dni'],
+  command: ['dnijjj'],
   description: 'Consulta datos detallados de una persona por su DNI (Perú)',
   exec: async ({ sock, from, msg, args }) => {
     const dni = args[0]
