@@ -18,32 +18,38 @@ async function getClient() {
   return client
 }
 
+// ✅ FUNCIÓN PARA LIMPIAR Y PERSONALIZAR EL TEXTO
 function limpiarTextoTelegram(texto) {
   if (!texto) return ''
   
-  let textoLimpio = texto
-    .split('\n')
-    .filter(linea => {
-      if (linea.startsWith('Credits :')) return false
-      if (linea.startsWith('Wanted for :')) return false
-      if (linea.includes('LEGEND')) return false
-      return true
-    })
-    .join('\n')
+  let lineas = texto.split('\n')
+  let lineasLimpias = []
   
-  textoLimpio = textoLimpio.replace(
-    /[#LEDERDATA\.NET] → RENIEC ONLINE \[PREMIUM\]/g,
-    '[★SOSI_CODEX] → RENIEC ONLINE [PREMIUM]'
-  )
+  for (let linea of lineas) {
+    const lineaTrim = linea.trim()
+    
+    // 1. Eliminar líneas de créditos o "Wanted for"
+    if (lineaTrim.startsWith('Credits') || lineaTrim.startsWith('Wanted for')) {
+      continue
+    }
+    
+    // 2. Si la línea contiene el encabezado antiguo, la reemplazamos por completo
+    // Esto funciona sin importar si tiene asteriscos **, backticks ` o corchetes
+    if (linea.includes('LEDERDATA.NET')) {
+      lineasLimpias.push('[★SOSI_CODEX] → RENIEC ONLINE [PREMIUM]')
+    } else {
+      lineasLimpias.push(linea)
+    }
+  }
   
-  return textoLimpio.trim()
+  return lineasLimpias.join('\n').trim()
 }
 
 async function consultarInterno(comando) {
   const tg = await getClient()
   
   const entidad = await tg.getEntity(BOT)
-  const chatId = entidad.id
+  const chatId = entidad.id // ✅ Extraer SOLO el ID numérico
   
   const mensajes = []
   let ultimo = Date.now()
@@ -62,6 +68,7 @@ async function consultarInterno(comando) {
       }, 2000)
     }
     
+    // ✅ Pasar el chatId numérico, NO el objeto entidad
     const filtro = new NewMessage({ chats: [chatId], incoming: true })
     tg.addEventHandler(handler, filtro)
     
@@ -76,6 +83,7 @@ async function consultarInterno(comando) {
   
   const salida = []
   for (const m of resultados) {
+    // ✅ Aplicar la limpieza del texto aquí
     const item = { texto: limpiarTextoTelegram(m.text || m.message || '') }
     
     if (m.photo) {
