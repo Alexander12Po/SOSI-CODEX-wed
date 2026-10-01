@@ -20,7 +20,10 @@ async function getClient() {
 
 async function consultarInterno(comando) {
   const tg = await getClient()
-  const entidad = await tg.getInputEntity(BOT)
+  
+  // Obtener la entidad del bot
+  const entidad = await tg.getEntity(BOT)
+  const chatId = entidad.id
   
   const mensajes = []
   let ultimo = Date.now()
@@ -41,7 +44,8 @@ async function consultarInterno(comando) {
       }, 2000)
     }
     
-    const filtro = new NewMessage({ chats: [entidad], incoming: true })
+    // ✅ Pasar SOLO el chatId numérico, NO el objeto entidad
+    const filtro = new NewMessage({ chats: [chatId], incoming: true })
     tg.addEventHandler(handler, filtro)
     
     // Timeout de seguridad: 15 segundos
@@ -51,7 +55,7 @@ async function consultarInterno(comando) {
     }, 15000)
   })
   
-  // Enviar el mensaje
+  // Enviar el mensaje usando el objeto entidad (esto sí funciona)
   await tg.sendMessage(entidad, { message: comando })
   
   // Esperar la respuesta sin bloquear el event loop
@@ -63,11 +67,9 @@ async function consultarInterno(comando) {
     const item = { texto: m.text || m.message || '' }
     
     if (m.photo) {
-      // Es una imagen
       item.tipo = 'imagen'
       item.buffer = await tg.downloadMedia(m, { outputFile: Buffer })
     } else if (m.document) {
-      // Es un documento
       item.tipo = 'documento'
       item.buffer = await tg.downloadMedia(m, { outputFile: Buffer })
       item.nombre = m.document.fileName || 'documento.pdf'
