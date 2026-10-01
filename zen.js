@@ -40,6 +40,11 @@ const MAX_INTENTOS_ANTES_DE_RESET = 5
 // Anti-choque de deploy en Render: el contenedor viejo y el nuevo usan la
 // misma sesión. Un 440 (conflict) es normal durante unos segundos, NO
 // significa credenciales rotas, así que no cuenta para el reset.
+// ID de la sesión principal en Mongo. Se puede cambiar con la variable de
+// entorno SESSION_ID (en Render) para aislarse de otra copia del bot que
+// siga usando la sesión 'main'.
+const SESSION_ID = process.env.SESSION_ID || 'main'
+
 let conflictosSeguidos = 0
 let cerrandoApp = false
 let sockActual = null
@@ -64,7 +69,7 @@ process.on('SIGTERM', () => {
 const PORT = process.env.PORT || 3000
 http.createServer(async (req, res) => {
   if (req.url === '/reset-session') {
-    await clearMongoAuthState('main')
+    await clearMongoAuthState(SESSION_ID)
     ultimoQR = null
     intentosFallidosSeguidos = 0
     res.writeHead(200, { 'Content-Type': 'text/plain' })
@@ -118,13 +123,13 @@ const question = (text) => new Promise((resolve) => {
 async function startBot() {
   const commit = (process.env.RENDER_GIT_COMMIT || 'local').slice(0, 7)
   const instancia = process.env.RENDER_INSTANCE_ID || 'local'
-  console.log(`🚀 Iniciando bot | commit: ${commit} | instancia: ${instancia}`)
+  console.log(`🚀 Iniciando bot | sesión: ${SESSION_ID} | commit: ${commit} | instancia: ${instancia}`)
 
   // 👇 Antes: useMultiFileAuthState('./session') — se perdía en cada
   // redeploy de Render porque el disco es efímero.
   // Ahora: la sesión se lee/escribe directamente en MongoDB, así que
   // sobrevive a reinicios y redeploys.
-  const { state, saveCreds } = await useMongoAuthState()
+  const { state, saveCreds } = await useMongoAuthState(SESSION_ID)
 
   const { version } = await fetchLatestWaWebVersion()
 
@@ -207,7 +212,7 @@ async function startBot() {
           console.log('Borrando sesión de Mongo automáticamente y generando QR nuevo...')
           ultimoQR = null
           intentosFallidosSeguidos = 0
-          await clearMongoAuthState('main')
+          await clearMongoAuthState(SESSION_ID)
         }
 
         setTimeout(() => { if (!cerrandoApp) startBot() }, 3000)
@@ -215,7 +220,7 @@ async function startBot() {
         console.log('Sesión cerrada, borrando credenciales viejas y generando QR nuevo...')
         ultimoQR = null
         intentosFallidosSeguidos = 0
-        await clearMongoAuthState('main')
+        await clearMongoAuthState(SESSION_ID)
         startBot()
       }
     } else if (connection === 'open') {
