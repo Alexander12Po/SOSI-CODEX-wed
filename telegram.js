@@ -40,8 +40,21 @@ function limpiarTextoTelegram(texto) {
       continue
     }
     
-    // 3. Eliminar mensajes de anti-spam
+    // 3. ✅ Formatear mensajes de ANTI-SPAM para que se vean profesionales
     if (lineaTrim.includes('ANTI-SPAM') || lineaTrim.includes('INTENTA DESPUES')) {
+      // Extraer los segundos del mensaje original
+      const match = lineaTrim.match(/(\d+)\s*SEGUNDOS/i)
+      const segundos = match ? match[1] : '90'
+      
+      lineasLimpias.push(`╭══════════════════════╮`)
+      lineasLimpias.push(`│ ⏳ *SOSI CODEX* | ANTI-SPAM │`)
+      lineasLimpias.push(`╰══════════════════════╯`)
+      lineasLimpias.push(``)
+      lineasLimpias.push(`️ Has excedido el límite de consultas.`)
+      lineasLimpias.push(`Por favor, espera *${segundos} segundos* antes de intentar nuevamente.`)
+      lineasLimpias.push(``)
+      lineasLimpias.push(`━━━━━━━━━━━━━━━━━━`)
+      lineasLimpias.push(`💡 Este es un límite del servicio para evitar abusos.`)
       continue
     }
     
@@ -56,20 +69,23 @@ function limpiarTextoTelegram(texto) {
   return lineasLimpias.join('\n').trim()
 }
 
-// ✅ Detectar si un mensaje es de créditos o anti-spam
+// ✅ Detectar si un mensaje es de créditos (para no enviarlo a WhatsApp)
+//    NOTA: Ya NO filtramos anti-spam, para que el usuario lo vea
 function esMensajeNoDeseado(texto) {
   if (!texto) return true
   const textoLower = texto.toLowerCase()
   
+  // Solo filtrar mensajes de créditos
   if (textoLower.includes('crédito') || textoLower.includes('credito') ||
       textoLower.includes('créditos restantes') || textoLower.includes('creditos restantes') ||
       textoLower.includes('se descontaron')) {
     return true
   }
   
-  if (textoLower.includes('anti-spam') || textoLower.includes('intenta despues')) {
-    return true
-  }
+  // ✅ Ya NO filtramos anti-spam, para que el usuario lo vea
+  // if (textoLower.includes('anti-spam') || textoLower.includes('intenta despues')) {
+  //   return true
+  // }
   
   return false
 }
@@ -89,7 +105,7 @@ async function consultarInterno(comando) {
     const handler = (evento) => {
       const msgText = evento.message.text || evento.message.message || ''
       
-      // ✅ Filtrar mensajes no deseados
+      // ✅ Filtrar solo mensajes de créditos (anti-spam ahora SÍ se muestra)
       if (!esMensajeNoDeseado(msgText)) {
         mensajes.push(evento.message)
       }
