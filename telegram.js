@@ -2,7 +2,7 @@ import { TelegramClient } from 'telegram/index.js'
 import { StringSession } from 'telegram/sessions/index.js'
 import { NewMessage } from 'telegram/events/index.js'
 
-const BOT = 'leder_data_og_bot'
+const BOT = 'leder_data_og_bot'  // ✅ Sin @
 let client = null
 let cola = Promise.resolve()
 
@@ -21,9 +21,8 @@ async function getClient() {
 async function consultarInterno(comando) {
   const tg = await getClient()
   
-  // ✅ Obtener la entidad y extraer SOLO el ID numérico
   const entidad = await tg.getEntity(BOT)
-  const chatId = entidad.id
+  const chatId = entidad.id  // ✅ Extraer SOLO el ID numérico
   
   const mensajes = []
   let ultimo = Date.now()
@@ -42,7 +41,7 @@ async function consultarInterno(comando) {
       }, 2000)
     }
     
-    // ✅ Pasar el chatId numérico, NO el objeto entidad
+    // ✅ Pasar chatId numérico, NO el objeto entidad
     const filtro = new NewMessage({ chats: [chatId], incoming: true })
     tg.addEventHandler(handler, filtro)
     
@@ -52,9 +51,9 @@ async function consultarInterno(comando) {
     }, 15000)
   })
   
-  // Enviar mensaje usando el objeto entidad (esto sí funciona)
   await tg.sendMessage(entidad, { message: comando })
   
+  // ✅ Esperar SIN bloquear (usando Promise, NO while true)
   const resultados = await respuestaPromise
   
   const salida = []
@@ -63,10 +62,10 @@ async function consultarInterno(comando) {
     
     if (m.photo) {
       item.tipo = 'imagen'
-      item.buffer = await tg.downloadMedia(m, { outputFile: Buffer })
+      item.buffer = await tg.downloadMedia(m)  // ✅ Sin parámetros extra
     } else if (m.document) {
       item.tipo = 'documento'
-      item.buffer = await tg.downloadMedia(m, { outputFile: Buffer })
+      item.buffer = await tg.downloadMedia(m)
       item.nombre = m.document.fileName || 'documento.pdf'
       item.mime = m.document.mimeType || 'application/pdf'
     }
