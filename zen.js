@@ -37,6 +37,22 @@ let ultimoQR = null
 let intentosFallidosSeguidos = 0
 const MAX_INTENTOS_ANTES_DE_RESET = 5
 
+// Anti-choque de deploy en Render: el contenedor viejo y el nuevo usan la
+// misma sesión. Un 440 (conflict) es normal durante unos segundos, NO
+// significa credenciales rotas, así que no cuenta para el reset.
+let conflictosSeguidos = 0
+let cerrandoApp = false
+let sockActual = null
+
+// Cuando Render apaga el contenedor viejo (SIGTERM), cerramos el socket
+// y dejamos de reconectar para no pelear con el contenedor nuevo.
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM recibido (deploy). Cerrando WhatsApp sin tocar la sesión...')
+  cerrandoApp = true
+  try { sockActual?.end(undefined) } catch {}
+  setTimeout(() => process.exit(0), 1500)
+})
+
 // -----------------------------------------------------------------------
 // Render (plan free) apaga cualquier Web Service que no reciba tráfico
 // HTTP durante 15 minutos. El bot de WhatsApp no recibe tráfico HTTP por
@@ -120,6 +136,8 @@ async function startBot() {
     cachedGroupMetadata: async (jid) => groupCache.get(jid)
   })
 
+  sockActual = sock
+
   let pairingRequested = false
   let phoneNumber = null
 
@@ -159,9 +177,22 @@ async function startBot() {
     }
 
     if (connection === 'close') {
+      if (cerrandoApp) return
+
       const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut
       console.log('❌ Conexión cerrada. Código:', statusCode, '| Motivo:', lastDisconnect?.error?.message || lastDisconnect?.error)
+
+      // 440 = conflicto (otra instancia usando la misma sesión, típico en
+      // un deploy). Esperamos con backoff y NO borramos nada de Mongo.
+      if (statusCode === DisconnectReason.connectionReplaced) {
+        conflictosSeguidos++
+        const espera = Math.min(10000 * conflictosSeguidos, 60000)
+        console.log(`⚠️ Conflicto 440 #${conflictosSeguidos} (probable deploy). Reintento en ${espera / 1000}s. La sesión NO se borra.`)
+        setTimeout(() => { if (!cerrandoApp) startBot() }, espera)
+        return
+      }
+      conflictosSeguidos = 0
 
       if (shouldReconnect) {
         intentosFallidosSeguidos++
@@ -175,7 +206,7 @@ async function startBot() {
           await clearMongoAuthState('main')
         }
 
-        startBot()
+        setTimeout(() => { if (!cerrandoApp) startBot() }, 3000)
       } else {
         console.log('Sesión cerrada, borrando credenciales viejas y generando QR nuevo...')
         ultimoQR = null
@@ -186,6 +217,7 @@ async function startBot() {
     } else if (connection === 'open') {
       console.log(`✅ ${botConfig.botName} conectado correctamente`)
       intentosFallidosSeguidos = 0
+      conflictosSeguidos = 0
     }
   })
 
