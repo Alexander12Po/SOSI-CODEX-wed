@@ -9,16 +9,16 @@ export default {
     // ✅ Validación con formato profesional
     if (!valor) {
       await sock.sendMessage(from, { 
-        text: '⚠️ *Formato incorrecto*\n\nUsa el comando de la siguiente manera:\n👉 *.dni <número>*' 
+        text: '⚠️ *Formato incorrecto*\n\nUsa el comando de la siguiente manera:\n *.dni <número>*' 
       }, { quoted: msg })
       return false
     }
     
     const comandoTelegram = `/dni ${valor}`
     
-    // ✅ Mensaje de carga profesional y elegante
+    // ✅ Mensaje de carga profesional
     await sock.sendMessage(from, { 
-      text: `🛡️ *SOSI CODEX* | Consultando registros de *${valor}*...\n⏳ Por favor, espere un momento.` 
+      text: `🛡️ *SOSI CODEX* | Consultando registros de *${valor}*...\n Por favor, espere un momento.` 
     }, { quoted: msg })
     
     let salida
