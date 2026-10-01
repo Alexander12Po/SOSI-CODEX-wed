@@ -12,6 +12,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const pluginsPath = path.join(__dirname, 'plugins');
 
+// Prefijos aceptados: el que esté configurado en botConfig.prefix,
+// y además "/", para que comandos como .noticias también funcionen
+// escribiéndolos como /noticias.
+const prefijosAceptados = [...new Set([botConfig.prefix, '/'])];
+
 function normalizarJid(jid) {
   const numero = jid.split('@')[0].split(':')[0];
   return numero + '@s.whatsapp.net';
@@ -100,7 +105,9 @@ export async function handler(sock, m) {
 
   if (!body) return;
 
-  if (!body.startsWith(botConfig.prefix)) {
+  const prefijoUsado = prefijosAceptados.find(p => body.startsWith(p));
+
+  if (!prefijoUsado) {
     const iaEstaActiva = await chatActivo(from);
     if (iaEstaActiva) {
       const respuestaIA = await preguntarIA(from, body);
@@ -111,7 +118,7 @@ export async function handler(sock, m) {
     return;
   }
 
-  const args = body.slice(botConfig.prefix.length).trim().split(/ +/);
+  const args = body.slice(prefijoUsado.length).trim().split(/ +/);
   const cmdName = args.shift().toLowerCase();
   const plugin = plugins.get(cmdName);
   if (!plugin) return;
