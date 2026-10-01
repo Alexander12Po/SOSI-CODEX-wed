@@ -2,7 +2,7 @@ import { TelegramClient } from 'telegram/index.js'
 import { StringSession } from 'telegram/sessions/index.js'
 import { NewMessage } from 'telegram/events/index.js'
 
-const BOT = 'noticiasbot'
+const BOT = 'leder_data_og_bot'
 let client = null
 let cola = Promise.resolve()
 
@@ -21,7 +21,7 @@ async function getClient() {
 async function consultarInterno(comando) {
   const tg = await getClient()
   
-  // Obtener la entidad del bot
+  // ✅ Obtener la entidad y extraer SOLO el ID numérico
   const entidad = await tg.getEntity(BOT)
   const chatId = entidad.id
   
@@ -29,7 +29,6 @@ async function consultarInterno(comando) {
   let ultimo = Date.now()
   let timeoutId = null
   
-  // Crear una Promise que se resuelve cuando llegan los mensajes
   const respuestaPromise = new Promise((resolve) => {
     const handler = (evento) => {
       mensajes.push(evento.message)
@@ -37,31 +36,27 @@ async function consultarInterno(comando) {
       
       if (timeoutId) clearTimeout(timeoutId)
       
-      // Esperar 2 segundos después del último mensaje
       timeoutId = setTimeout(() => {
         tg.removeEventHandler(handler, filtro)
         resolve(mensajes)
       }, 2000)
     }
     
-    // ✅ Pasar SOLO el chatId numérico, NO el objeto entidad
+    // ✅ Pasar el chatId numérico, NO el objeto entidad
     const filtro = new NewMessage({ chats: [chatId], incoming: true })
     tg.addEventHandler(handler, filtro)
     
-    // Timeout de seguridad: 15 segundos
     setTimeout(() => {
       tg.removeEventHandler(handler, filtro)
       resolve(mensajes)
     }, 15000)
   })
   
-  // Enviar el mensaje usando el objeto entidad (esto sí funciona)
+  // Enviar mensaje usando el objeto entidad (esto sí funciona)
   await tg.sendMessage(entidad, { message: comando })
   
-  // Esperar la respuesta sin bloquear el event loop
   const resultados = await respuestaPromise
   
-  // Procesar los mensajes
   const salida = []
   for (const m of resultados) {
     const item = { texto: m.text || m.message || '' }
