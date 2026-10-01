@@ -18,23 +18,19 @@ async function getClient() {
   return client
 }
 
-// ✅ Función para limpiar y modificar texto de Telegram
 function limpiarTextoTelegram(texto) {
   if (!texto) return ''
   
   let textoLimpio = texto
     .split('\n')
     .filter(linea => {
-      // ✅ Eliminar líneas de créditos y "Wanted for"
       if (linea.startsWith('Credits :')) return false
       if (linea.startsWith('Wanted for :')) return false
-      // Eliminar línea de LEGEND (emojis)
       if (linea.includes('LEGEND')) return false
       return true
     })
     .join('\n')
   
-  // ✅ Reemplazar el encabezado
   textoLimpio = textoLimpio.replace(
     /[#LEDERDATA\.NET] → RENIEC ONLINE \[PREMIUM\]/g,
     '[★SOSI_CODEX] → RENIEC ONLINE [PREMIUM]'
@@ -80,7 +76,6 @@ async function consultarInterno(comando) {
   
   const salida = []
   for (const m of resultados) {
-    // ✅ Aplicar la limpieza del texto
     const item = { texto: limpiarTextoTelegram(m.text || m.message || '') }
     
     if (m.photo) {
