@@ -12,9 +12,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const pluginsPath = path.join(__dirname, 'plugins');
 
-// Prefijos aceptados: el que esté configurado en botConfig.prefix,
-// y además "/", para que comandos como .noticias también funcionen
-// escribiéndolos como /noticias.
 const prefijosAceptados = [...new Set([botConfig.prefix, '/'])];
 
 function normalizarJid(jid) {
@@ -35,11 +32,9 @@ async function loadPlugins() {
       const module = await import(`./plugins/${file}`);
       const plugin = module.default;
       if (!plugin || typeof plugin.exec !== 'function') continue;
-
       let comandos = plugin.command;
       if (typeof comandos === 'string') comandos = [comandos];
       if (!Array.isArray(comandos)) continue;
-
       for (const cmd of comandos) {
         plugins.set(String(cmd).toLowerCase(), plugin);
       }
@@ -66,7 +61,6 @@ await loadPlugins();
 export async function handler(sock, m) {
   const msg = m.messages[0];
   if (!msg?.message) return;
-
   const from = msg.key.remoteJid;
   const type = Object.keys(msg.message)[0];
 
@@ -74,25 +68,20 @@ export async function handler(sock, m) {
   if (type === 'audioMessage') {
     const iaEstaActiva = await chatActivo(from);
     if (!iaEstaActiva) return;
-
     const texto = await transcribirAudio(msg);
     if (!texto) return;
-
     const respuesta = await preguntarIA(from, texto);
     if (!respuesta) return;
-
     const audioPath = await generarAudioRespuesta(respuesta);
     if (!audioPath) {
       await sock.sendMessage(from, { text: respuesta }, { quoted: msg });
       return;
     }
-
     await sock.sendMessage(from, {
       audio: fs.readFileSync(audioPath),
       mimetype: 'audio/ogg; codecs=opus',
       ptt: true
     }, { quoted: msg });
-
     fs.unlinkSync(audioPath);
     return;
   }
@@ -106,7 +95,6 @@ export async function handler(sock, m) {
   if (!body) return;
 
   const prefijoUsado = prefijosAceptados.find(p => body.startsWith(p));
-
   if (!prefijoUsado) {
     const iaEstaActiva = await chatActivo(from);
     if (iaEstaActiva) {
@@ -125,7 +113,6 @@ export async function handler(sock, m) {
 
   const senderRaw = msg.key.participantAlt || msg.key.participant || msg.key.remoteJidAlt || msg.key.remoteJid;
   const sender = normalizarJid(senderRaw);
-
   const costo = obtenerCosto(cmdName, typeof plugin.cost === 'number' ? plugin.cost : 2);
 
   sock.sendMessage(from, { react: { text: '📩', key: msg.key } }).catch(() => {});
@@ -136,32 +123,24 @@ export async function handler(sock, m) {
     if (!usuarioActual) {
       return await sock.sendMessage(from, { text: '❌ No estás registrado. Usa `.registrar nombre|contraseña` para comenzar.' }, { quoted: msg });
     }
-
     if (usuarioActual.creditos < costo) {
       return await sock.sendMessage(from, {
         text: `╭══════════════════════╮
 │ ⚠️ SOSI CODEX ALERTA │
 ╰══════════════════════╯
-
-🚫 *Créditos agotados*
-
+🚫 Créditos agotados
 Hola, tu saldo de créditos ya no es
 suficiente para realizar más consultas.
-
 ╭──────── 💎 RECARGA ────────╮
 │ 💳 Recarga tus créditos:
 │ 📲 +51 924 894 999
 ╰────────────────────────────╯
-
 🛒 Para ver los paquetes disponibles
 y precios utiliza:
-
-➜ *.comprar*
-
+➜ .comprar
 ━━━━━━━━━━━━━━━━━━
-
 ⚡ Recarga y continúa usando
-🤖 *SOSI CODEX* sin límites.`
+🤖 SOSI CODEX sin límites.`
       }, { quoted: msg });
     }
   } else if (!comandosLibres.includes(cmdName) && costo === 0) {
@@ -172,7 +151,6 @@ y precios utiliza:
 
   try {
     const resultado = await plugin.exec({ sock, msg, from, args, sender, body });
-
     const consultaExitosa = resultado !== false;
 
     if (!comandosLibres.includes(cmdName) && costo > 0 && consultaExitosa) {
@@ -181,7 +159,8 @@ y precios utiliza:
         { $inc: { creditos: -costo } },
         { returnDocument: 'after' }
       );
-      await sock.sendMessage(from, { text: `💳 Se descontaron *${costo}* crédito(s). Créditos restantes: *${usuarioActualizado.creditos}*` });
+      // ✅ ELIMINADO: El mensaje de créditos ya no se envía
+      // await sock.sendMessage(from, { text: `💳 Se descontaron *${costo}* crédito(s). Créditos restantes: *${usuarioActualizado.creditos}*` });
     }
   } catch (err) {
     console.error(`Error ejecutando "${cmdName}":`, err);
