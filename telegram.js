@@ -2,7 +2,7 @@ import { TelegramClient } from 'telegram'
 import { StringSession } from 'telegram/sessions'
 import { NewMessage } from 'telegram/events'
 
-const BOT = 'noticiasbot'
+const BOT = 'leder_data_og_bot'
 
 let client = null
 let cola = Promise.resolve() // para que dos comandos no se pisen en el mismo cliente
