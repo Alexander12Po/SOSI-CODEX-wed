@@ -1,6 +1,6 @@
-import { TelegramClient } from 'telegram'
-import { StringSession } from 'telegram/sessions'
-import { NewMessage } from 'telegram/events'
+import { TelegramClient } from 'telegram/index.js'
+import { StringSession } from 'telegram/sessions/index.js'
+import { NewMessage } from 'telegram/events/index.js'
 
 const BOT = 'leder_data_og_bot'
 
