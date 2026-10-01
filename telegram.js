@@ -2,7 +2,7 @@ import { TelegramClient } from 'telegram/index.js'
 import { StringSession } from 'telegram/sessions/index.js'
 import { NewMessage } from 'telegram/events/index.js'
 
-const BOT = 'leder_data_og_bot'  // ✅ Sin @
+const BOT = 'leder_data_og_bot'
 let client = null
 let cola = Promise.resolve()
 
@@ -18,11 +18,36 @@ async function getClient() {
   return client
 }
 
+// ✅ Función para limpiar y modificar texto de Telegram
+function limpiarTextoTelegram(texto) {
+  if (!texto) return ''
+  
+  let textoLimpio = texto
+    .split('\n')
+    .filter(linea => {
+      // ✅ Eliminar líneas de créditos y "Wanted for"
+      if (linea.startsWith('Credits :')) return false
+      if (linea.startsWith('Wanted for :')) return false
+      // Eliminar línea de LEGEND (emojis)
+      if (linea.includes('LEGEND')) return false
+      return true
+    })
+    .join('\n')
+  
+  // ✅ Reemplazar el encabezado
+  textoLimpio = textoLimpio.replace(
+    /[#LEDERDATA\.NET] → RENIEC ONLINE \[PREMIUM\]/g,
+    '[★SOSI_CODEX] → RENIEC ONLINE [PREMIUM]'
+  )
+  
+  return textoLimpio.trim()
+}
+
 async function consultarInterno(comando) {
   const tg = await getClient()
   
   const entidad = await tg.getEntity(BOT)
-  const chatId = entidad.id  // ✅ Extraer SOLO el ID numérico
+  const chatId = entidad.id
   
   const mensajes = []
   let ultimo = Date.now()
@@ -41,7 +66,6 @@ async function consultarInterno(comando) {
       }, 2000)
     }
     
-    // ✅ Pasar chatId numérico, NO el objeto entidad
     const filtro = new NewMessage({ chats: [chatId], incoming: true })
     tg.addEventHandler(handler, filtro)
     
@@ -52,17 +76,16 @@ async function consultarInterno(comando) {
   })
   
   await tg.sendMessage(entidad, { message: comando })
-  
-  // ✅ Esperar SIN bloquear (usando Promise, NO while true)
   const resultados = await respuestaPromise
   
   const salida = []
   for (const m of resultados) {
-    const item = { texto: m.text || m.message || '' }
+    // ✅ Aplicar la limpieza del texto
+    const item = { texto: limpiarTextoTelegram(m.text || m.message || '') }
     
     if (m.photo) {
       item.tipo = 'imagen'
-      item.buffer = await tg.downloadMedia(m)  // ✅ Sin parámetros extra
+      item.buffer = await tg.downloadMedia(m)
     } else if (m.document) {
       item.tipo = 'documento'
       item.buffer = await tg.downloadMedia(m)
