@@ -8,7 +8,7 @@ export default {
 
     if (!valor) {
       await sock.sendMessage(from, { 
-        text: '⚠️ *Formato incorrecto*\n\nUsa el comando así:\n *.nm <nombre completo>*' 
+        text: '⚠️ *Formato incorrecto*\n\nUsa el comando así:\n */nm <nombre completo>*' 
       }, { quoted: msg })
       return false
     }
