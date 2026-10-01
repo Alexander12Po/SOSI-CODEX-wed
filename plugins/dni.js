@@ -1,7 +1,7 @@
 import { consultarTelegram, enviarResultadoWhatsApp } from '../telegram.js'
 
 export default {
-  command: ['noticias'],
+  command: ['dni'],
   cost: 0,
   exec: async ({ sock, msg, from, args }) => {
     const valor = args.join(' ').trim()
@@ -13,16 +13,16 @@ export default {
 
     // 👇 Ajusta este formato si el bot de Telegram espera el valor distinto
     //    (ej. con tilde, con mayúscula, pegado al comando, etc.)
-    const comandoTelegram = `/noticias ${valor}`
+    const comandoTelegram = `/dni ${valor}`
 
-    await sock.sendMessage(from, { text: `📰 Consultando noticias de *${valor}*, espera un momento...` }, { quoted: msg })
+    await sock.sendMessage(from, { text: `🕵️ Consultando dni de *${valor}*, espera un momento...` }, { quoted: msg })
 
     let salida
     try {
       salida = await consultarTelegram(comandoTelegram)
     } catch (err) {
-      console.error('Error consultando el bot de Telegram (noticias):', err)
-      await sock.sendMessage(from, { text: '❌ No se pudo conectar con el servicio de noticias. Intenta de nuevo en un momento.' }, { quoted: msg })
+      console.error('Error consultando, verifique su conexión (dni):', err)
+      await sock.sendMessage(from, { text: '❌ No se pudo conectar con el servicio de sosi. Intenta de nuevo en un momento.' }, { quoted: msg })
       return false
     }
 
