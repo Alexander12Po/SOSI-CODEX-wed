@@ -56,7 +56,7 @@ function limpiarTextoTelegram(texto) {
   return lineasLimpias.join('\n').trim()
 }
 
-// ✅ Detectar si un mensaje es de créditos o anti-spam (para no enviarlo a WhatsApp)
+// ✅ Detectar si un mensaje es de créditos o anti-spam
 function esMensajeNoDeseado(texto) {
   if (!texto) return true
   const textoLower = texto.toLowerCase()
