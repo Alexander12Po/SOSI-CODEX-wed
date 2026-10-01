@@ -18,7 +18,7 @@ async function getClient() {
   return client
 }
 
-// ✅ FUNCIÓN PARA LIMPIAR Y PERSONALIZAR EL TEXTO
+// ✅ Función para limpiar texto y filtrar mensajes no deseados
 function limpiarTextoTelegram(texto) {
   if (!texto) return ''
   
@@ -28,17 +28,24 @@ function limpiarTextoTelegram(texto) {
   for (let linea of lineas) {
     const lineaTrim = linea.trim()
     
-    // 1. Eliminar líneas de créditos o "Wanted for" (detecta con o sin asteriscos **)
-    if (lineaTrim.includes('Credits') || lineaTrim.includes('Wanted for')) {
+    // 1. Eliminar líneas de créditos
+    if (lineaTrim.includes('crédito') || lineaTrim.includes('credito') || 
+        lineaTrim.includes('Créditos restantes') || lineaTrim.includes('Creditos restantes') ||
+        lineaTrim.includes('Se descontaron')) {
       continue
     }
     
-    // 2. Eliminar línea de LEGEND (emojis)
-    if (lineaTrim.includes('LEGEND')) {
+    // 2. Eliminar "Wanted for" y "LEGEND"
+    if (lineaTrim.includes('Wanted for') || lineaTrim.includes('LEGEND')) {
       continue
     }
     
-    // 3. Reemplazar el encabezado de LEDERDATA por SOSI_CODEX
+    // 3. Eliminar mensajes de anti-spam
+    if (lineaTrim.includes('ANTI-SPAM') || lineaTrim.includes('INTENTA DESPUES')) {
+      continue
+    }
+    
+    // 4. Reemplazar encabezado de LEDERDATA por SOSI_CODEX
     if (linea.includes('LEDERDATA.NET')) {
       lineasLimpias.push('[★SOSI_CODEX] → RENIEC ONLINE [PREMIUM]')
     } else {
@@ -49,11 +56,29 @@ function limpiarTextoTelegram(texto) {
   return lineasLimpias.join('\n').trim()
 }
 
+// ✅ Detectar si un mensaje es de créditos o anti-spam (para no enviarlo a WhatsApp)
+function esMensajeNoDeseado(texto) {
+  if (!texto) return true
+  const textoLower = texto.toLowerCase()
+  
+  if (textoLower.includes('crédito') || textoLower.includes('credito') ||
+      textoLower.includes('créditos restantes') || textoLower.includes('creditos restantes') ||
+      textoLower.includes('se descontaron')) {
+    return true
+  }
+  
+  if (textoLower.includes('anti-spam') || textoLower.includes('intenta despues')) {
+    return true
+  }
+  
+  return false
+}
+
 async function consultarInterno(comando) {
   const tg = await getClient()
   
   const entidad = await tg.getEntity(BOT)
-  const chatId = entidad.id // ✅ Extraer SOLO el ID numérico
+  const chatId = entidad.id // ✅ Solo el ID numérico
   
   const mensajes = []
   let ultimo = Date.now()
@@ -62,7 +87,13 @@ async function consultarInterno(comando) {
   // ✅ Usar Promises en lugar de while(true) para no bloquear WhatsApp
   const respuestaPromise = new Promise((resolve) => {
     const handler = (evento) => {
-      mensajes.push(evento.message)
+      const msgText = evento.message.text || evento.message.message || ''
+      
+      // ✅ Filtrar mensajes no deseados
+      if (!esMensajeNoDeseado(msgText)) {
+        mensajes.push(evento.message)
+      }
+      
       ultimo = Date.now()
       
       if (timeoutId) clearTimeout(timeoutId)
@@ -73,7 +104,6 @@ async function consultarInterno(comando) {
       }, 2000)
     }
     
-    // ✅ Pasar el chatId numérico, NO el objeto entidad
     const filtro = new NewMessage({ chats: [chatId], incoming: true })
     tg.addEventHandler(handler, filtro)
     
@@ -88,12 +118,11 @@ async function consultarInterno(comando) {
   
   const salida = []
   for (const m of resultados) {
-    // ✅ Aplicar la limpieza del texto aquí
     const item = { texto: limpiarTextoTelegram(m.text || m.message || '') }
     
     if (m.photo) {
       item.tipo = 'imagen'
-      item.buffer = await tg.downloadMedia(m) // ✅ Sin parámetros extra
+      item.buffer = await tg.downloadMedia(m)
     } else if (m.document) {
       item.tipo = 'documento'
       item.buffer = await tg.downloadMedia(m)
