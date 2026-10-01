@@ -116,6 +116,10 @@ const question = (text) => new Promise((resolve) => {
 })
 
 async function startBot() {
+  const commit = (process.env.RENDER_GIT_COMMIT || 'local').slice(0, 7)
+  const instancia = process.env.RENDER_INSTANCE_ID || 'local'
+  console.log(`🚀 Iniciando bot | commit: ${commit} | instancia: ${instancia}`)
+
   // 👇 Antes: useMultiFileAuthState('./session') — se perdía en cada
   // redeploy de Render porque el disco es efímero.
   // Ahora: la sesión se lee/escribe directamente en MongoDB, así que
@@ -215,7 +219,7 @@ async function startBot() {
         startBot()
       }
     } else if (connection === 'open') {
-      console.log(`✅ ${botConfig.botName} conectado correctamente`)
+      console.log(`✅ ${botConfig.botName} conectado correctamente | commit: ${commit} | instancia: ${instancia}`)
       intentosFallidosSeguidos = 0
       conflictosSeguidos = 0
     }
