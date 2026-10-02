@@ -60,7 +60,7 @@ function limpiarTexto(texto) {
       lineasLimpias.push(`│ ⏳ *SOSI CODEX* | ANTI-SPAM │`)
       lineasLimpias.push(`╰══════════════════════╯`)
       lineasLimpias.push(``)
-      lineasLimpias.push(`⚠️ Has excedido el límite de consultas.`)
+      lineasLimpias.push(`️ Has excedido el límite de consultas.`)
       lineasLimpias.push(`Por favor, espera *${segundos} segundos* antes de intentar nuevamente.`)
       lineasLimpias.push(``)
       lineasLimpias.push(`━━━━━━━━━━━━━━━━━━`)
@@ -79,8 +79,10 @@ function limpiarTexto(texto) {
 
 async function consultarInterno(comando) {
   const tg = await getClient()
+  
+  // ✅ Obtener la entidad y extraer SOLO el ID numérico
   const entidad = await tg.getEntity(BOT)
-  const chatId = entidad.id // ✅ Solo el ID numérico
+  const chatId = entidad.id
 
   const mensajes = []
   let ultimo = Date.now()
@@ -90,18 +92,26 @@ async function consultarInterno(comando) {
   const respuestaPromise = new Promise((resolve) => {
     const handler = (evento) => {
       const msgText = evento.message.text || evento.message.message || ''
+      
+      // ✅ Filtrar mensajes de créditos (NO enviarlos a WhatsApp)
       if (!esMensajeDeCreditos(msgText)) {
         mensajes.push(evento.message)
       }
+      
       ultimo = Date.now()
+      
       if (timeoutId) clearTimeout(timeoutId)
+      
       timeoutId = setTimeout(() => {
         tg.removeEventHandler(handler, filtro)
         resolve(mensajes)
       }, 2000)
     }
+    
+    // ✅ Pasar SOLO el chatId numérico, NO el objeto entidad
     const filtro = new NewMessage({ chats: [chatId], incoming: true })
     tg.addEventHandler(handler, filtro)
+    
     setTimeout(() => {
       tg.removeEventHandler(handler, filtro)
       resolve(mensajes)
@@ -113,7 +123,9 @@ async function consultarInterno(comando) {
 
   const salida = []
   for (const m of resultados) {
+    // ✅ Usar m.text en lugar de m.message
     const item = { texto: limpiarTexto(m.text || m.message || '') }
+    
     if (m.photo) {
       item.tipo = 'imagen'
       item.buffer = await tg.downloadMedia(m)
@@ -123,8 +135,10 @@ async function consultarInterno(comando) {
       item.nombre = m.document.fileName || 'documento.pdf'
       item.mime = m.document.mimeType || 'application/pdf'
     }
+    
     salida.push(item)
   }
+  
   return salida
 }
 
