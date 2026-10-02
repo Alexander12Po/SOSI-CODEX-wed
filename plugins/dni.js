@@ -1,3 +1,4 @@
+
 import { consultarTelegram, enviarResultadoWhatsApp } from '../telegram.js'
 
 export default {
@@ -15,9 +16,9 @@ export default {
 
     const comandoTelegram = `/dni ${valor}`
 
-    // ✅ Enviar mensaje de carga y GUARDAR el key
+    // ✅ Enviar mensaje de carga y GUARDAR key
     const msgCarga = await sock.sendMessage(from, { 
-      text: `🛡️ *SOSI CODEX* | Consultando registros de *${valor}*...\n Por favor, espere un momento.` 
+      text: `️ *SOSI CODEX* | Consultando registros de *${valor}*...\n⏳ Por favor, espere un momento.` 
     }, { quoted: msg })
 
     let salida
