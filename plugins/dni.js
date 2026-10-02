@@ -8,24 +8,23 @@ export default {
 
     if (!valor) {
       await sock.sendMessage(from, { 
-        text: '⚠️ *Formato incorrecto*\n\nUsa el comando así:\n👉 */dni <número>*' 
+        text: '⚠️ *Formato incorrecto*\n\nUsa el comando así:\n👉 *.dni <número>*' 
       }, { quoted: msg })
       return false
     }
 
     const comandoTelegram = `/dni ${valor}`
 
-    // ✅ Enviar mensaje de carga y GUARDAR el key para eliminarlo después
+    // ✅ Enviar mensaje de carga y GUARDAR el key
     const msgCarga = await sock.sendMessage(from, { 
-      text: `🛡️ *SOSI CODEX* | Consultando registros de *${valor}*...\n⏳ Por favor, espere un momento.` 
+      text: `🛡️ *SOSI CODEX* | Consultando registros de *${valor}*...\n Por favor, espere un momento.` 
     }, { quoted: msg })
 
     let salida
     try {
       salida = await consultarTelegram(comandoTelegram)
     } catch (err) {
-      console.error('Error consultando, verifique su conexión (dni):', err)
-      // ✅ Eliminar mensaje de carga si hay error
+      console.error('Error consultando (dni):', err)
       if (msgCarga?.key) {
         await sock.sendMessage(from, { delete: msgCarga.key }).catch(() => {})
       }
@@ -36,7 +35,6 @@ export default {
     }
 
     if (!salida.length) {
-      // ✅ Eliminar mensaje de carga si no hay resultados
       if (msgCarga?.key) {
         await sock.sendMessage(from, { delete: msgCarga.key }).catch(() => {})
       }
@@ -46,12 +44,11 @@ export default {
       return false
     }
 
-    // ✅ ELIMINAR mensaje de carga antes de enviar el resultado
+    // ✅ Eliminar mensaje de carga y enviar resultado
     if (msgCarga?.key) {
       await sock.sendMessage(from, { delete: msgCarga.key }).catch(() => {})
     }
 
-    // Enviar el resultado limpio
     await enviarResultadoWhatsApp(sock, from, salida)
   }
 }
