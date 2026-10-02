@@ -1,3 +1,4 @@
+
 import { TelegramClient } from 'telegram/index.js'
 import { StringSession } from 'telegram/sessions/index.js'
 import { NewMessage } from 'telegram/events/index.js'
@@ -18,11 +19,11 @@ async function getClient() {
   return client
 }
 
-// ✅ Filtro robusto de créditos
+// ✅ Filtro de créditos
 function esMensajeDeCreditos(texto) {
   if (!texto) return true
   const t = texto.toLowerCase()
-  const patrones = ['credit', 'descontaron', 'saldo', 'remaining', 'balance', '💳', '💎', 'restante', 'se descontaron']
+  const patrones = ['credit', 'descontaron', 'saldo', 'remaining', 'balance', '💳', '', 'restante', 'se descontaron']
   for (const patron of patrones) {
     if (t.includes(patron)) return true
   }
@@ -80,7 +81,7 @@ function limpiarTexto(texto) {
 async function consultarInterno(comando) {
   const tg = await getClient()
   
-  // ✅ Obtener la entidad y extraer SOLO el ID numérico
+  // ✅ Obtener entidad y extraer SOLO el ID numérico
   const entidad = await tg.getEntity(BOT)
   const chatId = entidad.id
 
@@ -93,7 +94,7 @@ async function consultarInterno(comando) {
     const handler = (evento) => {
       const msgText = evento.message.text || evento.message.message || ''
       
-      // ✅ Filtrar mensajes de créditos (NO enviarlos a WhatsApp)
+      // ✅ Filtrar solo créditos
       if (!esMensajeDeCreditos(msgText)) {
         mensajes.push(evento.message)
       }
@@ -108,7 +109,7 @@ async function consultarInterno(comando) {
       }, 2000)
     }
     
-    // ✅ Pasar SOLO el chatId numérico, NO el objeto entidad
+    // ✅ Pasar SOLO chatId numérico
     const filtro = new NewMessage({ chats: [chatId], incoming: true })
     tg.addEventHandler(handler, filtro)
     
@@ -123,7 +124,6 @@ async function consultarInterno(comando) {
 
   const salida = []
   for (const m of resultados) {
-    // ✅ Usar m.text en lugar de m.message
     const item = { texto: limpiarTexto(m.text || m.message || '') }
     
     if (m.photo) {
