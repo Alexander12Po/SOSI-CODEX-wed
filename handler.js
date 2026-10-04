@@ -11,7 +11,6 @@ import { transcribirAudio, generarAudioRespuesta } from './audio.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const pluginsPath = path.join(__dirname, 'plugins');
-
 const prefijosAceptados = [...new Set([botConfig.prefix, '/'])];
 
 function normalizarJid(jid) {
@@ -21,7 +20,7 @@ function normalizarJid(jid) {
 
 await connectDB();
 
-const comandosLibres = ['registrar', 'menu', 'help', 'credito', 'perfil', 'comprar', 'addcredito', 'setcredito', 'listausuarios', 'usuarios', 'verusuario', 'bienvenida', 'cmds', 'consultas', 'vv', 'viewonce', 'iaon', 'iaoff', 'purge', 'kill', 'sosi', 'nr', 'rambo'];
+const comandosLibres = ['registrar', 'menu', 'help', 'credito', 'perfil', 'comprar', 'addcredito', 'setcredito', 'listausuarios', 'usuarios', 'verusuario', 'bienvenida', 'cmds', 'consultas', 'vv', 'viewonce', 'iaon', 'iaoff', 'purge', 'kill', 'sosi', 'nr', 'rambo', 'eliminarusuarios', 'clearusers', 'borrarusuarios', 'pedido', 'yape'];
 
 export const plugins = new Map();
 
@@ -64,7 +63,6 @@ export async function handler(sock, m) {
   const from = msg.key.remoteJid;
   const type = Object.keys(msg.message)[0];
 
-  // --- Manejo de mensajes de audio ---
   if (type === 'audioMessage') {
     const iaEstaActiva = await chatActivo(from);
     if (!iaEstaActiva) return;
@@ -154,16 +152,15 @@ y precios utiliza:
     const consultaExitosa = resultado !== false;
 
     if (!comandosLibres.includes(cmdName) && costo > 0 && consultaExitosa) {
-      const usuarioActualizado = await User.findOneAndUpdate(
+      await User.findOneAndUpdate(
         { numero: sender },
         { $inc: { creditos: -costo } },
         { returnDocument: 'after' }
       );
-      // ✅ ELIMINADO: El mensaje de créditos ya no se envía
-      // await sock.sendMessage(from, { text: `💳 Se descontaron *${costo}* crédito(s). Créditos restantes: *${usuarioActualizado.creditos}*` });
+      // ✅ Ya no muestra el mensaje de créditos descontados
     }
   } catch (err) {
     console.error(`Error ejecutando "${cmdName}":`, err);
-    await sock.sendMessage(from, { text: '❌ Ocurrió un error al ejecutar el comando.' }, { quoted: msg });
+    await sock.sendMessage(from, { text: ' Ocurrió un error al ejecutar el comando.' }, { quoted: msg });
   }
 }
