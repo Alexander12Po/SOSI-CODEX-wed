@@ -8,17 +8,17 @@ let cola = Promise.resolve()
 
 async function getClient() {
   if (client && client.connected) return client
+  // ✅ Usa las MISMAS credenciales que telegram.js
   client = new TelegramClient(
-    new StringSession(process.env.TG_SESSION_YAPE),
-    Number(process.env.TG_API_ID_YAPE || process.env.TG_API_ID),
-    process.env.TG_API_HASH_YAPE || process.env.TG_API_HASH,
+    new StringSession(process.env.TG_SESSION),
+    Number(process.env.TG_API_ID),
+    process.env.TG_API_HASH,
     { connectionRetries: 5 }
   )
   await client.connect()
   return client
 }
 
-// ✅ Filtrar mensajes no deseados (créditos, anti-spam, etc.)
 function esMensajeNoDeseado(texto) {
   if (!texto) return true
   const t = texto.toLowerCase()
@@ -38,17 +38,13 @@ function esMensajeNoDeseado(texto) {
   return false
 }
 
-// ✅ Limpieza de texto
 function limpiarTexto(texto) {
   if (!texto) return ''
   let lineas = texto.split('\n')
   let lineasLimpias = []
-
   for (let linea of lineas) {
     const lineaTrim = linea.trim()
     if (esMensajeNoDeseado(lineaTrim)) continue
-    
-    // Personalizar encabezado si viene del bot
     if (linea.includes('SEEKER') || linea.includes('seeker')) {
       lineasLimpias.push('[★SOSI_CODEX] → YAPE / PLIN [PREMIUM]')
     } else {
@@ -62,11 +58,9 @@ async function consultarInterno(comando) {
   const tg = await getClient()
   const entidad = await tg.getEntity(BOT)
   const chatId = entidad.id
-
   const mensajes = []
   let ultimo = Date.now()
   let timeoutId = null
-
   const respuestaPromise = new Promise((resolve) => {
     const handler = (evento) => {
       const msgText = evento.message.text || evento.message.message || ''
@@ -87,10 +81,8 @@ async function consultarInterno(comando) {
       resolve(mensajes)
     }, 15000)
   })
-
   await tg.sendMessage(entidad, { message: comando })
   const resultados = await respuestaPromise
-
   const salida = []
   for (const m of resultados) {
     const item = { texto: limpiarTexto(m.text || m.message || '') }
