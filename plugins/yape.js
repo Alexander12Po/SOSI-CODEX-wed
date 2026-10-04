@@ -1,86 +1,124 @@
-import { consultarYape, enviarResultadoWhatsApp } from '../telegramYape.js'
+import { TelegramClient } from 'telegram/index.js'
+import { StringSession } from 'telegram/sessions/index.js'
+import { NewMessage } from 'telegram/events/index.js'
 
-export default {
-  command: ['yape'],
-  cost: 0,
-  exec: async ({ sock, msg, from, args }) => {
-    const textoCompleto = args.join(' ').trim()
+const BOT = 'seeker_databot'
+let client = null
+let cola = Promise.resolve()
 
-    if (!textoCompleto) {
-      await sock.sendMessage(from, { 
-        text: `⚠️ *Formato incorrecto*\n\nUsa el comando así:\n *.yape <monto>|<nombre>|<dígito>|<destino>*\n\n *Ejemplos:*\n• *.yape 100|MARIA|123|Yape*\n• *.yape 50|JUAN|456|Plin*` 
-      }, { quoted: msg })
-      return false
-    }
+async function getClient() {
+  if (client && client.connected) return client
+  // ✅ Usa las MISMAS credenciales que telegram.js
+  client = new TelegramClient(
+    new StringSession(process.env.TG_SESSION),
+    Number(process.env.TG_API_ID),
+    process.env.TG_API_HASH,
+    { connectionRetries: 5 }
+  )
+  await client.connect()
+  return client
+}
 
-    // ✅ Detectar si el usuario ya usó "|" o usó espacios
-    let partes
-    if (textoCompleto.includes('|')) {
-      partes = textoCompleto.split('|').map(s => s.trim())
+function esMensajeNoDeseado(texto) {
+  if (!texto) return true
+  const t = texto.toLowerCase()
+  const patrones = [
+    'credit', 'descontaron', 'saldo', 'remaining', 'balance',
+    '💳', '💎', 'restante', 'se descontaron',
+    'anti-spam', 'intenta despues', 'intenta después',
+    'wanted for', 'legend'
+  ]
+  for (const patron of patrones) {
+    if (t.includes(patron)) return true
+  }
+  if (t.match(/restante[s]?\s*:\s*\d+/)) return true
+  if (t.match(/remaining\s*:\s*\d+/)) return true
+  const lineaTrim = texto.trim()
+  if (lineaTrim.match(/^\d{5,}$/) && lineaTrim.length < 15) return true
+  return false
+}
+
+function limpiarTexto(texto) {
+  if (!texto) return ''
+  let lineas = texto.split('\n')
+  let lineasLimpias = []
+  for (let linea of lineas) {
+    const lineaTrim = linea.trim()
+    if (esMensajeNoDeseado(lineaTrim)) continue
+    if (linea.includes('SEEKER') || linea.includes('seeker')) {
+      lineasLimpias.push('[★SOSI_CODEX] → YAPE / PLIN [PREMIUM]')
     } else {
-      // Separar por espacios (máximo 4 partes)
-      partes = textoCompleto.split(/\s+/).slice(0, 4)
+      lineasLimpias.push(linea)
     }
+  }
+  return lineasLimpias.join('\n').trim()
+}
 
-    if (partes.length < 4) {
-      await sock.sendMessage(from, { 
-        text: `⚠️ *Faltan datos*\n\nNecesito 4 valores separados por *|*:\n\n👉 *.yape <monto>|<nombre>|<dígito>|<destino>*\n\n📝 *Ejemplo:*\n*.yape 100|MARIA|123|Yape*` 
-      }, { quoted: msg })
-      return false
+async function consultarInterno(comando) {
+  const tg = await getClient()
+  const entidad = await tg.getEntity(BOT)
+  const chatId = entidad.id
+  const mensajes = []
+  let ultimo = Date.now()
+  let timeoutId = null
+  const respuestaPromise = new Promise((resolve) => {
+    const handler = (evento) => {
+      const msgText = evento.message.text || evento.message.message || ''
+      if (!esMensajeNoDeseado(msgText)) {
+        mensajes.push(evento.message)
+      }
+      ultimo = Date.now()
+      if (timeoutId) clearTimeout(timeoutId)
+      timeoutId = setTimeout(() => {
+        tg.removeEventHandler(handler, filtro)
+        resolve(mensajes)
+      }, 2000)
     }
-
-    const [monto, nombre, digito, destino] = partes
-
-    // ✅ Validar que el monto sea un número
-    if (isNaN(monto) || Number(monto) <= 0) {
-      await sock.sendMessage(from, { 
-        text: '️ *Monto inválido*\n\nEl monto debe ser un número mayor a 0.\n\n📝 Ejemplo: *.yape 100|MARIA|123|Yape*' 
-      }, { quoted: msg })
-      return false
+    const filtro = new NewMessage({ chats: [chatId], incoming: true })
+    tg.addEventHandler(handler, filtro)
+    setTimeout(() => {
+      tg.removeEventHandler(handler, filtro)
+      resolve(mensajes)
+    }, 15000)
+  })
+  await tg.sendMessage(entidad, { message: comando })
+  const resultados = await respuestaPromise
+  const salida = []
+  for (const m of resultados) {
+    const item = { texto: limpiarTexto(m.text || m.message || '') }
+    if (m.photo) {
+      item.tipo = 'imagen'
+      item.buffer = await tg.downloadMedia(m)
+    } else if (m.document) {
+      item.tipo = 'documento'
+      item.buffer = await tg.downloadMedia(m)
+      item.nombre = m.document.fileName || 'documento.pdf'
+      item.mime = m.document.mimeType || 'application/pdf'
     }
+    salida.push(item)
+  }
+  return salida
+}
 
-    // ✅ Validar destino (Yape o Plin)
-    const destinoValido = ['yape', 'plin'].includes(destino.toLowerCase())
-    if (!destinoValido) {
-      await sock.sendMessage(from, { 
-        text: '⚠️ *Destino inválido*\n\nEl destino debe ser *Yape* o *Plin*.\n\n📝 Ejemplo: *.yape 100|MARIA|123|Yape*' 
-      }, { quoted: msg })
-      return false
+export function consultarYape(comando) {
+  const tarea = cola.then(() => consultarInterno(comando))
+  cola = tarea.catch(() => {})
+  return tarea
+}
+
+export async function enviarResultadoWhatsApp(sock, from, salida) {
+  for (const item of salida) {
+    if (item.tipo === 'imagen') {
+      await sock.sendMessage(from, { image: item.buffer, caption: item.texto || undefined })
+    } else if (item.tipo === 'documento') {
+      await sock.sendMessage(from, {
+        document: item.buffer,
+        mimetype: item.mime || 'application/pdf',
+        fileName: item.nombre || 'documento.pdf',
+        caption: item.texto || undefined
+      })
+    } else if (item.texto) {
+      await sock.sendMessage(from, { text: item.texto })
     }
-
-    // ✅ Construir comando para Telegram
-    const comandoTelegram = `/yape ${monto}|${nombre}|${digito}|${destino}`
-
-    // ✅ Mensaje de carga
-    const msgCarga = await sock.sendMessage(from, { 
-      text: `🛡️ *SOSI CODEX* | Procesando pago de *S/ ${monto}* a *${nombre}*...\n⏳ Por favor, espere un momento.` 
-    }, { quoted: msg })
-
-    let salida
-    try {
-      salida = await consultarYape(comandoTelegram)
-    } catch (err) {
-      console.error('Error consultando (yape):', err)
-      if (msgCarga?.key) await sock.sendMessage(from, { delete: msgCarga.key }).catch(() => {})
-      await sock.sendMessage(from, { 
-        text: '❌ *Error de conexión*\n\nNo se pudo comunicar con el servicio. Intenta de nuevo en un momento.' 
-      }, { quoted: msg })
-      return false
-    }
-
-    if (!salida.length) {
-      if (msgCarga?.key) await sock.sendMessage(from, { delete: msgCarga.key }).catch(() => {})
-      await sock.sendMessage(from, { 
-        text: `⚠️ *Sin resultados*\n\nNo se pudo procesar el pago para *${nombre}*. Verifica los datos o intenta más tarde.` 
-      }, { quoted: msg })
-      return false
-    }
-
-    // ✅ Eliminar mensaje de carga y enviar resultado
-    if (msgCarga?.key) {
-      await sock.sendMessage(from, { delete: msgCarga.key }).catch(() => {})
-    }
-
-    await enviarResultadoWhatsApp(sock, from, salida)
   }
 }
