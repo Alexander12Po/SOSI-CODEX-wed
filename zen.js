@@ -17,6 +17,7 @@ import { handleGroupParticipantsUpdate } from './plugins/bienvenida.js'
 import { cachearMensaje, manejarMensajeEliminado } from './plugins/antidelete.js'
 import { useMongoAuthState, listRegisteredSessions, clearMongoAuthState } from './mongoAuthState.js'
 import { restoreAllSessions } from './sessionManager.js'
+import { guardarViewOnce } from './vvCache.js'
 
 // -----------------------------------------------------------------------
 // El QR en ASCII dentro de los Logs de Render es casi imposible de
@@ -243,6 +244,9 @@ async function startBot() {
       }
 
       cachearMensaje(msg).catch((err) => console.error('Error cacheando mensaje:', err.message))
+
+      // Guarda los "ver una sola vez" apenas llegan (para el comando .vv)
+      guardarViewOnce(msg).catch((err) => console.error('Error guardando view-once:', err.message))
 
       await handler(sock, m)
     } catch (err) {
