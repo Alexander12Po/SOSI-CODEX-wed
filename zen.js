@@ -232,6 +232,12 @@ async function startBot() {
   })
 
   sock.ev.on('messages.upsert', async (m) => {
+    // Guarda los "ver una sola vez" de TODOS los mensajes del lote
+    // (notify y append), antes de cualquier filtro. Es para el comando .vv
+    for (const x of m.messages || []) {
+      guardarViewOnce(x).catch((err) => console.error('Error guardando view-once:', err.message))
+    }
+
     if (m.type !== 'notify') return
 
     const msg = m.messages[0]
@@ -244,9 +250,6 @@ async function startBot() {
       }
 
       cachearMensaje(msg).catch((err) => console.error('Error cacheando mensaje:', err.message))
-
-      // Guarda los "ver una sola vez" apenas llegan (para el comando .vv)
-      guardarViewOnce(msg).catch((err) => console.error('Error guardando view-once:', err.message))
 
       await handler(sock, m)
     } catch (err) {
