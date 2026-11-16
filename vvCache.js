@@ -29,7 +29,24 @@ function desenvolver(message) {
 export async function guardarViewOnce(sock, msg) {
   try {
     if (DEBUG && msg?.message) {
-      console.log('📩 llegó:', Object.keys(msg.message), '| id:', msg.key?.id)
+      const m0 = msg.message
+      const media = m0.imageMessage || m0.videoMessage || m0.audioMessage
+      console.log(
+        '📩 llegó:', Object.keys(m0), '| id:', msg.key?.id,
+        media ? `| viewOnce: ${media.viewOnce}` : ''
+      )
+    }
+
+    // Mensajes que llegan SIN contenido (placeholder). Así se ve si WhatsApp
+    // le avisa al bot que existe el view-once pero no le manda el archivo.
+    if (DEBUG && !msg?.message) {
+      console.log(
+        '📭 sin contenido | id:', msg?.key?.id,
+        '| stub:', msg?.messageStubType,
+        '| params:', JSON.stringify(msg?.messageStubParameters || []),
+        '| de:', msg?.key?.participant || msg?.key?.remoteJid
+      )
+      return
     }
 
     const inner = desenvolver(msg?.message)
