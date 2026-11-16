@@ -235,7 +235,7 @@ async function startBot() {
     // Guarda los "ver una sola vez" de TODOS los mensajes del lote
     // (notify y append), antes de cualquier filtro. Es para el comando .vv
     for (const x of m.messages || []) {
-      guardarViewOnce(x).catch((err) => console.error('Error guardando view-once:', err.message))
+      guardarViewOnce(sock, x).catch((err) => console.error('Error guardando view-once:', err.message))
     }
 
     if (m.type !== 'notify') return
