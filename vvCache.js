@@ -6,11 +6,15 @@ export const vvCache = new Map()
 
 const TTL_MS = 30 * 60 * 1000 // 30 minutos
 const MAX_ITEMS = 50
+const DEBUG = true // pon false cuando ya funcione
 
 function desenvolver(message) {
   if (!message) return null
-  // ephemeralMessage envuelve mensajes en chats con mensajes temporales
-  const base = message.ephemeralMessage?.message || message
+  // ephemeralMessage / documentWithCaptionMessage envuelven mensajes
+  const base =
+    message.ephemeralMessage?.message ||
+    message.deviceSentMessage?.message ||
+    message
   return (
     base.viewOnceMessage?.message ||
     base.viewOnceMessageV2?.message ||
@@ -23,13 +27,22 @@ function desenvolver(message) {
 
 export async function guardarViewOnce(msg) {
   try {
+    if (DEBUG && msg?.message) {
+      console.log('📩 llegó:', Object.keys(msg.message), '| id:', msg.key?.id)
+    }
+
     const inner = desenvolver(msg?.message)
     if (!inner) return
 
     const type = Object.keys(inner).find((k) =>
       ['imageMessage', 'videoMessage', 'audioMessage'].includes(k)
     )
-    if (!type) return
+    if (!type) {
+      if (DEBUG) console.log('⚠️ view-once sin imagen/video/audio:', Object.keys(inner))
+      return
+    }
+
+    if (DEBUG) console.log(`🔎 view-once detectado (${type}), descargando...`)
 
     const buffer = await downloadMediaMessage(
       { key: msg.key, message: inner },
@@ -37,7 +50,6 @@ export async function guardarViewOnce(msg) {
       {}
     )
 
-    // Evita que la memoria crezca sin control
     if (vvCache.size >= MAX_ITEMS) {
       vvCache.delete(vvCache.keys().next().value)
     }
@@ -53,6 +65,6 @@ export async function guardarViewOnce(msg) {
     setTimeout(() => vvCache.delete(msg.key.id), TTL_MS)
     console.log(`🔒 View-once guardado (${type}) id: ${msg.key.id}`)
   } catch (err) {
-    console.error('vvCache error:', err.message)
+    console.error('❌ vvCache error:', err.message)
   }
 }
