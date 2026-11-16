@@ -7,6 +7,7 @@ export const vvCache = new Map()
 const TTL_MS = 30 * 60 * 1000 // 30 minutos
 const MAX_ITEMS = 50
 const DEBUG = true // pon false cuando ya funcione
+const AVISAR = true // te manda un aviso a tu propio chat cuando guarda uno
 
 function desenvolver(message) {
   if (!message) return null
@@ -25,7 +26,7 @@ function desenvolver(message) {
   )
 }
 
-export async function guardarViewOnce(msg) {
+export async function guardarViewOnce(sock, msg) {
   try {
     if (DEBUG && msg?.message) {
       console.log('📩 llegó:', Object.keys(msg.message), '| id:', msg.key?.id)
@@ -64,6 +65,13 @@ export async function guardarViewOnce(msg) {
 
     setTimeout(() => vvCache.delete(msg.key.id), TTL_MS)
     console.log(`🔒 View-once guardado (${type}) id: ${msg.key.id}`)
+
+    if (AVISAR && sock?.user?.id) {
+      const miJid = sock.user.id.split(':')[0].split('@')[0] + '@s.whatsapp.net'
+      await sock.sendMessage(miJid, {
+        text: '🔒 Guardé un archivo de una sola vez. Respóndele con *.vv* en los próximos 30 min.'
+      })
+    }
   } catch (err) {
     console.error('❌ vvCache error:', err.message)
   }
