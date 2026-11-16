@@ -16,6 +16,7 @@ export default {
     }
 
     const cached = vvCache.get(quotedId)
+    console.log('🔍 .vv buscando id:', quotedId, '| en cache:', [...vvCache.keys()])
 
     if (!cached) {
       return sock.sendMessage(
