@@ -1,27 +1,58 @@
 import { downloadMediaMessage } from '@whiskeysockets/baileys'
 
+// Guarda en memoria los archivos "ver una sola vez" apenas llegan,
+// porque después WhatsApp borra la URL y la clave para descargarlos.
 export const vvCache = new Map()
 
-export async function guardarViewOnce(m) {
+const TTL_MS = 30 * 60 * 1000 // 30 minutos
+const MAX_ITEMS = 50
+
+function desenvolver(message) {
+  if (!message) return null
+  // ephemeralMessage envuelve mensajes en chats con mensajes temporales
+  const base = message.ephemeralMessage?.message || message
+  return (
+    base.viewOnceMessage?.message ||
+    base.viewOnceMessageV2?.message ||
+    base.viewOnceMessageV2Extension?.message ||
+    (base.imageMessage?.viewOnce ? { imageMessage: base.imageMessage } : null) ||
+    (base.videoMessage?.viewOnce ? { videoMessage: base.videoMessage } : null) ||
+    (base.audioMessage?.viewOnce ? { audioMessage: base.audioMessage } : null)
+  )
+}
+
+export async function guardarViewOnce(msg) {
   try {
-    const inner =
-      m.message?.viewOnceMessage?.message ||
-      m.message?.viewOnceMessageV2?.message ||
-      m.message?.viewOnceMessageV2Extension?.message
+    const inner = desenvolver(msg?.message)
     if (!inner) return
 
-    const buffer = await downloadMediaMessage(
-      { key: m.key, message: inner }, 'buffer', {}
+    const type = Object.keys(inner).find((k) =>
+      ['imageMessage', 'videoMessage', 'audioMessage'].includes(k)
     )
-    const type = Object.keys(inner)[0]
-    vvCache.set(m.key.id, {
+    if (!type) return
+
+    const buffer = await downloadMediaMessage(
+      { key: msg.key, message: inner },
+      'buffer',
+      {}
+    )
+
+    // Evita que la memoria crezca sin control
+    if (vvCache.size >= MAX_ITEMS) {
+      vvCache.delete(vvCache.keys().next().value)
+    }
+
+    vvCache.set(msg.key.id, {
       buffer,
       type,
       mimetype: inner[type]?.mimetype,
-      ptt: inner[type]?.ptt
+      ptt: inner[type]?.ptt || false,
+      caption: inner[type]?.caption || ''
     })
-    setTimeout(() => vvCache.delete(m.key.id), 30 * 60 * 1000)
-  } catch (e) {
-    console.error('vvCache error:', e.message)
+
+    setTimeout(() => vvCache.delete(msg.key.id), TTL_MS)
+    console.log(`🔒 View-once guardado (${type}) id: ${msg.key.id}`)
+  } catch (err) {
+    console.error('vvCache error:', err.message)
   }
 }
