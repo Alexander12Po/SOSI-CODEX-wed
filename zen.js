@@ -28,18 +28,31 @@ import { guardarViewOnce } from './vvCache.js'
 // La identidad se fija al VINCULAR: si la cambias, hay que cerrar la sesión
 // del bot en el celular (Dispositivos vinculados) y vincular de nuevo.
 // Requiere @whiskeysockets/baileys 7.0.0-rc14 o más nuevo.
+//
+// Es una copia (array normal) porque al pedir un código de vinculación se
+// cambia un instante el nombre del dispositivo (ver pedirCodigoConNombreValido).
 // -----------------------------------------------------------------------
 const TIENE_PRESET_ANDROID = typeof Browsers.android === 'function'
-const IDENTIDAD_BOT = TIENE_PRESET_ANDROID
+const IDENTIDAD_BOT = [...(TIENE_PRESET_ANDROID
   ? Browsers.android('Android')
-  : ['Android', 'Android', '14'] // seguro: si Baileys es viejo, no se cae
+  : ['Android', 'Android', '14'])] // seguro: si Baileys es viejo, no se cae
 
 // -----------------------------------------------------------------------
 // ESTADO DE LA VINCULACIÓN (lo lee el panel web /qr)
 // -----------------------------------------------------------------------
 let ultimoQR = null        // texto del QR actual (null si no hay, o si ya está conectado)
 let botConectado = false   // true cuando WhatsApp confirmó la conexión
-let ultimoPedidoCodigo = 0 // para no pedir códigos en ráfaga
+let ultimoPedidoCodigo = 0 // cuándo se entregó el último código (para no pedir en ráfaga)
+let generandoCodigo = false
+let inicioCicloQR = 0      // cuándo salió el primer QR del socket actual
+
+// WhatsApp cierra la conexión (408 "QR refs attempts ended") ~160 s después de
+// mostrar el primer QR si nadie vincula. Un código pedido cuando ya casi se
+// acaba ese tiempo muere junto con la conexión, así que en ese caso
+// reiniciamos para que el código tenga el ciclo completo.
+const CICLO_QR_MS = 160000
+const MIN_RESTANTE_MS = 100000
+const COOLDOWN_CODIGO_MS = 15000
 
 // -----------------------------------------------------------------------
 // Contador de reconexiones fallidas seguidas. Si Baileys no detecta un
@@ -74,7 +87,7 @@ process.on('SIGTERM', () => {
 })
 
 // -----------------------------------------------------------------------
-// 🆕 CLAVE OPCIONAL DEL PANEL
+// CLAVE OPCIONAL DEL PANEL
 // Si creas la variable PANEL_KEY en Render, las rutas /qr, /codigo y
 // /reset-session solo funcionan con la clave:
 //   https://tu-app.onrender.com/qr?key=TU_CLAVE
@@ -109,13 +122,54 @@ function leerJSON(req, maxBytes = 2048) {
   })
 }
 
+const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// Espera a que el bot muestre un QR (solo un bot SIN vincular muestra QR).
+async function esperarQR(msMax) {
+  const fin = Date.now() + msMax
+  while (!ultimoQR && !botConectado && Date.now() < fin) await esperar(300)
+  return !!ultimoQR
+}
+
 // -----------------------------------------------------------------------
-// 🆕 CÓDIGO DE VINCULACIÓN (alternativa al QR)
+// CÓDIGO DE VINCULACIÓN (alternativa al QR)
 // Pide a WhatsApp un código de 8 caracteres para el número indicado. Se
 // escribe en: WhatsApp > Dispositivos vinculados > Vincular un dispositivo >
 // Vincular con el número de teléfono. Solo funciona mientras el bot NO está
 // vinculado y ya está conectado a WhatsApp esperando (cuando hay un QR).
 // -----------------------------------------------------------------------
+
+// 🆕 Arreglo 1: Baileys manda a WhatsApp el nombre del dispositivo como
+// "<IDENTIDAD[1]> (<IDENTIDAD[0]>)". Con la identidad Android eso es
+// "Android (Android)", un nombre que WhatsApp NO acepta para códigos: la
+// librería te devuelve el código, pero WhatsApp lo rechaza después (código
+// muerto, en el celular sale "incorrecto"). Solo para este paso usamos un
+// nombre normal ("Chrome (Windows)"). La identidad Android (la que permite
+// recibir los "ver una vez") ya se envió al conectar y no se toca.
+async function pedirCodigoConNombreValido(numero) {
+  const [os, navegador] = [IDENTIDAD_BOT[0], IDENTIDAD_BOT[1]]
+  IDENTIDAD_BOT[0] = 'Windows'
+  IDENTIDAD_BOT[1] = 'Chrome'
+  try {
+    return await sockActual.requestPairingCode(numero)
+  } finally {
+    IDENTIDAD_BOT[0] = os
+    IDENTIDAD_BOT[1] = navegador
+  }
+}
+
+// 🆕 Arreglo 2: reinicia la conexión para tener un ciclo de QR/código nuevo
+// y completo. Solo se llama cuando YA hay un QR en pantalla (o sea, el bot
+// NO está vinculado), así que borrar la sesión no pierde nada.
+async function reiniciarParaCodigo() {
+  console.log('🔄 Reiniciando la conexión para que el código tenga el tiempo completo...')
+  ultimoQR = null
+  try { sockActual?.end(undefined) } catch {}
+  // Borra el número que dejó guardado un código anterior (evita el 401 al reconectar)
+  await clearMongoAuthState(SESSION_ID)
+  return esperarQR(30000)
+}
+
 async function generarCodigoVinculacion(numeroCrudo) {
   let numero = String(numeroCrudo || '').replace(/\D/g, '')
   if (numero.length === 9 && numero.startsWith('9')) numero = '51' + numero // solo 9 dígitos: se asume Perú
@@ -125,28 +179,44 @@ async function generarCodigoVinculacion(numeroCrudo) {
   if (botConectado || sockActual?.authState?.creds?.registered) {
     return { status: 409, error: 'El bot ya está vinculado. Para vincular otro número, cierra su sesión en WhatsApp > Dispositivos vinculados.' }
   }
-  if (!sockActual || !ultimoQR) {
-    return { status: 503, error: 'El bot todavía se está conectando a WhatsApp. Espera unos segundos e intenta otra vez.' }
+  if (generandoCodigo) {
+    return { status: 429, error: 'Ya se está generando un código. Espera unos segundos.' }
   }
-  const ahora = Date.now()
-  if (ahora - ultimoPedidoCodigo < 8000) {
-    return { status: 429, error: 'Espera unos segundos antes de pedir otro código.' }
+  const espera = COOLDOWN_CODIGO_MS - (Date.now() - ultimoPedidoCodigo)
+  if (espera > 0) {
+    return { status: 429, error: 'Espera ' + Math.ceil(espera / 1000) + ' s antes de pedir otro código.' }
   }
-  ultimoPedidoCodigo = ahora
+
+  generandoCodigo = true
   try {
-    const codigo = await sockActual.requestPairingCode(numero)
+    // Si el bot está reconectando, esperamos a que salga el QR
+    if (!ultimoQR && !(await esperarQR(20000))) {
+      if (botConectado) return { status: 409, error: 'El bot ya quedó vinculado.' }
+      return { status: 503, error: 'El bot todavía se está conectando a WhatsApp. Espera unos segundos e intenta otra vez.' }
+    }
+
+    // Si al QR le queda poco tiempo, reiniciamos para tener el ciclo completo
+    if (Date.now() - inicioCicloQR > CICLO_QR_MS - MIN_RESTANTE_MS) {
+      if (!(await reiniciarParaCodigo())) {
+        return { status: 503, error: 'No se pudo reiniciar la conexión con WhatsApp. Intenta otra vez o usa el QR.' }
+      }
+    }
+
+    const codigo = await pedirCodigoConNombreValido(numero)
     const legible = codigo.match(/.{1,4}/g)?.join('-') || codigo
     console.log(`🔑 Código de vinculación para +${numero}: ${legible}`)
+    ultimoPedidoCodigo = Date.now()
     return { status: 200, ok: true, numero, codigo: legible }
   } catch (err) {
-    ultimoPedidoCodigo = 0
     console.log('❌ Error generando el código:', err?.message || err)
     return { status: 500, error: 'No se pudo generar el código (' + (err?.message || 'error desconocido') + '). Prueba otra vez o usa el QR.' }
+  } finally {
+    generandoCodigo = false
   }
 }
 
 // -----------------------------------------------------------------------
-// 🆕 PÁGINA /qr con dos opciones: QR y Código.
+// PÁGINA /qr con dos opciones: QR y Código.
 // El QR se refresca solo cada 3 segundos (sin recargar la página, así no se
 // borra el número que estás escribiendo). OJO: dentro de este texto no uses
 // comillas invertidas ni el signo de dólar con llaves.
@@ -202,6 +272,7 @@ const PAGINA_VINCULAR = `<!DOCTYPE html>
       <div id="codigo"></div>
       <p id="msg" class="nota"></p>
       <p class="nota">WhatsApp &gt; Dispositivos vinculados &gt; Vincular un dispositivo &gt; Vincular con el número de teléfono</p>
+      <p class="nota">Si WhatsApp dice que el código es incorrecto, usa la pestaña QR.</p>
     </div>
   </div>
 </div>
@@ -243,7 +314,7 @@ const PAGINA_VINCULAR = `<!DOCTYPE html>
 
   function pedir() {
     el('msg').className = 'nota';
-    el('msg').textContent = 'Generando…';
+    el('msg').textContent = 'Generando… puede tardar hasta 30 segundos';
     el('codigo').textContent = '';
     el('btn').disabled = true;
     fetch('/codigo?key=' + encodeURIComponent(KEY), {
@@ -256,7 +327,7 @@ const PAGINA_VINCULAR = `<!DOCTYPE html>
         el('btn').disabled = false;
         if (d.ok) {
           el('codigo').textContent = d.codigo;
-          el('msg').textContent = 'Código para +' + d.numero + '. Escríbelo en WhatsApp ahora, dura pocos minutos.';
+          el('msg').textContent = 'Código para +' + d.numero + '. Escríbelo en WhatsApp ahora, dura unos 2 minutos.';
         } else {
           el('msg').className = 'nota error';
           el('msg').textContent = d.error || 'No se pudo generar el código.';
@@ -306,8 +377,8 @@ http.createServer(async (req, res) => {
       intentosFallidosSeguidos = 0
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' })
       res.end('✅ Sesión borrada de Mongo. El bot generará un QR nuevo en unos segundos, revisa /qr')
-      console.log('🗑️ Sesión "main" borrada manualmente vía /reset-session')
-      // 🆕 Cierra el socket actual para que reconecte ya con la sesión vacía
+      console.log('🗑️ Sesión "' + SESSION_ID + '" borrada manualmente vía /reset-session')
+      // Cierra el socket actual para que reconecte ya con la sesión vacía
       try { sockActual?.end(undefined) } catch {}
       return
     }
@@ -373,7 +444,9 @@ async function startBot() {
 
   const sock = makeWASocket({
     version,
-    logger: pino({ level: 'silent' }),
+    // Para diagnosticar el código de vinculación pon LOG_LEVEL=trace en Render
+    // (muestra todo lo que se envía y recibe; quítalo después, llena los logs).
+    logger: pino({ level: process.env.LOG_LEVEL || 'silent' }),
     auth: state,
     browser: IDENTIDAD_BOT,
     cachedGroupMetadata: async (jid) => groupCache.get(jid)
@@ -388,12 +461,13 @@ async function startBot() {
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
-    // 🆕 Siempre guardamos el QR para el panel /qr (antes dependía de loginMethod).
-    // El código de vinculación se pide desde el mismo panel, sin consola.
+    // Siempre guardamos el QR para el panel /qr. El código de vinculación
+    // se pide desde el mismo panel, sin consola.
     if (qr) {
       ultimoQR = qr
       if (!avisoQRMostrado) {
         avisoQRMostrado = true
+        inicioCicloQR = Date.now()
         console.log('📲 Bot sin vincular. Abre (tu URL de Render)/qr para vincular con QR o con código.')
       }
       // El QR en ASCII llena los logs; solo si pones QR_EN_LOGS=si en Render
@@ -408,7 +482,16 @@ async function startBot() {
 
       const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut
-      console.log('❌ Conexión cerrada. Código:', statusCode, '| Motivo:', lastDisconnect?.error?.message || lastDisconnect?.error)
+      const motivo = lastDisconnect?.error?.message || lastDisconnect?.error
+      console.log('❌ Conexión cerrada. Código:', statusCode, '| Motivo:', motivo)
+
+      // 🆕 Se acabaron los QR y nadie vinculó. Si antes pediste un código,
+      // Baileys dejó guardado tu número en la sesión; al reconectar WhatsApp
+      // respondería 401 y recién ahí borraría todo. Como el bot NO está
+      // vinculado, limpiamos aquí y reconectamos limpio.
+      if (/QR refs attempts ended/i.test(String(motivo))) {
+        await clearMongoAuthState(SESSION_ID)
+      }
 
       // 440 = conflicto (otra instancia usando la misma sesión, típico en
       // un deploy). Esperamos con backoff y NO borramos nada de Mongo.
