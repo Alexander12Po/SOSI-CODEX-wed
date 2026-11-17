@@ -175,6 +175,7 @@ export async function manejarMensajeEliminado(sock, msg) {
 
 ⚠️ *Mensaje eliminado detectado*
 
+💻 *Dueño del bot +51924894999*
 👤 *Enviado por:* @${original.senderId.split('@')[0]}
 🧹 *Eliminado por:* ${esMismaPersona ? 'el mismo remitente' : '@' + eliminadoPorId.split('@')[0]}
 📦 *Tipo:* ${original.tipo}${esTextoPlano ? `\n\n💬 *Contenido:*\n${original.texto}` : ''}
