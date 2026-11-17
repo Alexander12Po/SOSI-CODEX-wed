@@ -2,6 +2,7 @@ import 'dotenv/config'
 import http from 'http'
 import {
   makeWASocket,
+  Browsers,
   fetchLatestWaWebVersion,
   DisconnectReason
 } from '@whiskeysockets/baileys'
@@ -18,6 +19,22 @@ import { cachearMensaje, manejarMensajeEliminado } from './plugins/antidelete.js
 import { useMongoAuthState, listRegisteredSessions, clearMongoAuthState } from './mongoAuthState.js'
 import { restoreAllSessions } from './sessionManager.js'
 import { guardarViewOnce } from './vvCache.js'
+
+// -----------------------------------------------------------------------
+// 🆕 IDENTIDAD DEL DISPOSITIVO VINCULADO
+// WhatsApp NO entrega el contenido de los "ver una vez" a los dispositivos
+// vinculados tipo web/Chrome (el mensaje llega vacío). Solo lo entrega a los
+// que se identifican como Android. Por eso antes el .vv nunca encontraba nada.
+//
+// La identidad se fija al VINCULAR: después de subir este cambio hay que
+// cerrar la sesión del bot en el celular (Dispositivos vinculados) y
+// escanear el QR nuevo.
+// Requiere @whiskeysockets/baileys 7.0.0-rc14 o más nuevo.
+// -----------------------------------------------------------------------
+const TIENE_PRESET_ANDROID = typeof Browsers.android === 'function'
+const IDENTIDAD_BOT = TIENE_PRESET_ANDROID
+  ? Browsers.android('Android')
+  : ['Android', 'Android', '14'] // seguro: si Baileys es viejo, no se cae
 
 // -----------------------------------------------------------------------
 // El QR en ASCII dentro de los Logs de Render es casi imposible de
@@ -125,6 +142,8 @@ async function startBot() {
   const commit = (process.env.RENDER_GIT_COMMIT || 'local').slice(0, 7)
   const instancia = process.env.RENDER_INSTANCE_ID || 'local'
   console.log(`🚀 Iniciando bot | sesión: ${SESSION_ID} | commit: ${commit} | instancia: ${instancia}`)
+  // 🆕 Para comprobar en los logs de Render que la identidad Android quedó activa
+  console.log(`🪪 Identidad: ${JSON.stringify(IDENTIDAD_BOT)} | preset android: ${TIENE_PRESET_ANDROID ? 'sí' : 'NO (Baileys viejo: sube a 7.0.0-rc14 y borra package-lock.json)'}`)
 
   // 👇 Antes: useMultiFileAuthState('./session') — se perdía en cada
   // redeploy de Render porque el disco es efímero.
@@ -142,7 +161,7 @@ async function startBot() {
     version,
     logger: pino({ level: 'silent' }),
     auth: state,
-    browser: ['SOSI CODEX', 'Chrome', '1.0.0'],
+    browser: IDENTIDAD_BOT, // 🆕 antes: ['SOSI CODEX', 'Chrome', '1.0.0']
     cachedGroupMetadata: async (jid) => groupCache.get(jid)
   })
 
@@ -235,6 +254,12 @@ async function startBot() {
     // Guarda los "ver una sola vez" de TODOS los mensajes del lote
     // (notify y append), antes de cualquier filtro. Es para el comando .vv
     for (const x of m.messages || []) {
+      // 🆕 Si WhatsApp no entrega el contenido de un "ver una vez", el mensaje
+      // llega SIN x.message. Este aviso te dice que el problema es de WhatsApp
+      // (identidad del dispositivo) y no del código de vvCache.js.
+      if (!x.message && (x.key?.isViewOnce || x.messageStubParameters?.[0] === 'Message absent from node')) {
+        console.log('📭 Llegó un "ver una vez" VACÍO (WhatsApp no entregó el contenido a este dispositivo). id:', x.key?.id)
+      }
       guardarViewOnce(sock, x).catch((err) => console.error('Error guardando view-once:', err.message))
     }
 
