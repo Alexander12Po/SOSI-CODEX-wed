@@ -10,9 +10,9 @@ import User from '../models/User.js';
 const DUEÑOS = ['51924894999'];          // sin límites (solo dígitos, con código de país)
 const REQUERIR_REGISTRO = true;          // los demás deben estar registrados (.registrar)
 const MAX_DUEÑO = 20;                    // máximo de estados por comando para ti
-const MAX_OTROS = 3;                     // máximo de estados por comando para los demás
-const ESPERA_OTROS_SEG = 60;             // segundos de espera entre usos para los demás
-const MAX_TEXTO = 700;                   // largo máximo del texto
+const MAX_OTROS = 30;                     // máximo de estados por comando para los demás
+const ESPERA_OTROS_SEG = 1;             // segundos de espera entre usos para los demás
+const MAX_TEXTO = 7000;                   // largo máximo del texto
 const VER_USUARIOS_REGISTRADOS = true;   // quién ve el estado: tú + usuarios registrados del bot
 const CONTACTOS_EXTRA = [];              // más personas, ej: '51999999999@s.whatsapp.net'
 const PAUSA_MS = 2000;                   // pausa entre un estado y otro
