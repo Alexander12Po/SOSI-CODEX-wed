@@ -20,7 +20,8 @@ function normalizarJid(jid) {
 
 await connectDB();
 
-const comandosLibres = ['registrar', 'menu', 'help', 'credito', 'perfil', 'comprar', 'addcredito', 'setcredito', 'listausuarios', 'usuarios', 'verusuario', 'bienvenida', 'cmds', 'consultas', 'vv', 'viewonce', 'iaon', 'iaoff', 'purge', 'kill', 'sosi', 'nr', 'rambo', 'eliminarusuarios', 'clearusers', 'borrarusuarios', 'pedido', 'yape'];
+// ✅ CAMBIO 1: se agregó 'xf' al final de esta lista (sin cobro de créditos)
+const comandosLibres = ['registrar', 'menu', 'help', 'credito', 'perfil', 'comprar', 'addcredito', 'setcredito', 'listausuarios', 'usuarios', 'verusuario', 'bienvenida', 'cmds', 'consultas', 'vv', 'viewonce', 'iaon', 'iaoff', 'purge', 'kill', 'sosi', 'nr', 'rambo', 'eliminarusuarios', 'clearusers', 'borrarusuarios', 'pedido', 'yape', 'xf'];
 
 export const plugins = new Map();
 
@@ -84,10 +85,12 @@ export async function handler(sock, m) {
     return;
   }
 
+  // ✅ CAMBIO 2: se agregó la línea de videoMessage para leer el pie de los videos
   const body =
     type === 'conversation' ? msg.message.conversation :
     type === 'extendedTextMessage' ? msg.message.extendedTextMessage.text :
     type === 'imageMessage' ? (msg.message.imageMessage.caption || '') :
+    type === 'videoMessage' ? (msg.message.videoMessage.caption || '') :
     '';
 
   if (!body) return;
