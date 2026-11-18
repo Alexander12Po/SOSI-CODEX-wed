@@ -1,8 +1,8 @@
 // plugins/xf.js
 // Uso:
 //   .xf 10 hola me gusta el limón        -> 10 estados de texto
-//   (imagen con pie) .xf 5 mi texto      -> 5 estados con la imagen
-//   (responder a una imagen) .xf 3 texto -> 3 estados con esa imagen
+//   (imagen o video con pie) .xf 5 texto      -> 5 estados con ese archivo
+//   (responder a imagen o video) .xf 3 texto  -> 3 estados con ese archivo
 import { downloadMediaMessage } from '@whiskeysockets/baileys'; // si tu paquete se llama "baileys", cámbialo aquí
 
 // Números que pueden usar el comando (solo dígitos, con código de país)
@@ -34,17 +34,20 @@ export default {
     cantidad = Math.min(Math.max(cantidad, 1), MAX_ESTADOS);
     const texto = args.join(' ').trim();
 
-    // ¿Hay imagen? (en el mismo mensaje o respondiendo a una)
+    // ¿Hay imagen o video? (en el mismo mensaje o respondiendo a uno)
     const m = msg.message;
     const ctx = m?.extendedTextMessage?.contextInfo;
     const imgPropia = m?.imageMessage;
+    const vidPropio = m?.videoMessage;
     const imgCitada = ctx?.quotedMessage?.imageMessage;
+    const vidCitado = ctx?.quotedMessage?.videoMessage;
+    const esVideo = !!(vidPropio || (!imgPropia && vidCitado));
 
     let buffer = null;
     try {
-      if (imgPropia) {
+      if (imgPropia || vidPropio) {
         buffer = await downloadMediaMessage(msg, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage });
-      } else if (imgCitada) {
+      } else if (imgCitada || vidCitado) {
         const citado = {
           key: { remoteJid: from, id: ctx.stanzaId, participant: ctx.participant },
           message: ctx.quotedMessage,
@@ -52,13 +55,13 @@ export default {
         buffer = await downloadMediaMessage(citado, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage });
       }
     } catch (e) {
-      console.error('xf: error bajando imagen', e);
-      await sock.sendMessage(from, { text: '❌ No pude descargar la imagen.' }, { quoted: msg });
+      console.error('xf: error bajando archivo', e);
+      await sock.sendMessage(from, { text: '❌ No pude descargar el archivo.' }, { quoted: msg });
       return false;
     }
 
     if (!buffer && !texto) {
-      await sock.sendMessage(from, { text: 'Uso: .xf 10 tu texto\nPuedes mandar una imagen con ese pie, o responder a una imagen.' }, { quoted: msg });
+      await sock.sendMessage(from, { text: 'Uso: .xf 10 tu texto\nPuedes mandar una imagen o video con ese pie, o responder a una imagen o video.' }, { quoted: msg });
       return false;
     }
 
@@ -72,7 +75,10 @@ export default {
     for (let i = 0; i < cantidad; i++) {
       try {
         if (buffer) {
-          await sock.sendMessage('status@broadcast', { image: buffer, caption: texto }, { statusJidList });
+          const contenido = esVideo
+            ? { video: buffer, caption: texto, mimetype: 'video/mp4' }
+            : { image: buffer, caption: texto };
+          await sock.sendMessage('status@broadcast', contenido, { statusJidList });
         } else {
           await sock.sendMessage(
             'status@broadcast',
