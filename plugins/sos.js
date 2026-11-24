@@ -2,15 +2,18 @@
 export const chatsConIA = new Set();
 
 export default {
-  command: ['sos', 'bs', 'xd'],
+  command: ['sos', 'bs'],
   cost: 0,
   exec: async ({ sock, msg, from, args, command, sender }) => {
+    console.log(`🔍 [SOS] Comando recibido: ${command} en chat: ${from}`);
+    
     if (command === 'sos') {
       if (chatsConIA.has(from)) {
         await sock.sendMessage(from, { text: 'Ya está activo en este chat.' }, { quoted: msg });
         return false;
       }
       chatsConIA.add(from);
+      console.log(`✅ [SOS] Chat agregado. Total activos: ${chatsConIA.size}`);
       await sock.sendMessage(from, { text: 'Modo persona activado. Escribe lo que quieras.' }, { quoted: msg });
       return false;
     } 
@@ -21,6 +24,7 @@ export default {
         return false;
       }
       chatsConIA.delete(from);
+      console.log(`❌ [SOS] Chat eliminado. Total activos: ${chatsConIA.size}`);
       await sock.sendMessage(from, { text: 'Modo persona desactivado.' }, { quoted: msg });
       return false;
     }
