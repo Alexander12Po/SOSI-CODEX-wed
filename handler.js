@@ -5,9 +5,10 @@ import { botConfig } from './config.js';
 import { obtenerCosto } from './costos.js';
 import { connectDB } from './database.js';
 import User from './models/User.js';
-import { transcribirAudio, generarAudioRespuesta } from './audio.js';
-import { chatsConIA } from './plugins/hd.js'; // <-- NUEVO: Import para la IA fría
-import axios from 'axios'; // <-- NUEVO: Import para la API de Xrahat
+import { preguntarIA, chatActivo } from './groq.js'; // ✅ MANTENIDO
+import { transcribirAudio, generarAudioRespuesta } from './audio.js'; // ✅ MANTENIDO
+import { chatsConIA } from './plugins/hd.js'; // 🆕 NUEVO: Para la IA fría
+import axios from 'axios'; // 🆕 NUEVO: Para la API de Xrahat
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,7 +22,7 @@ function normalizarJid(jid) {
 
 await connectDB();
 
-const comandosLibres = ['registrar', 'menu', 'help', 'credito', 'perfil', 'comprar', 'addcredito', 'setcredito', 'listausuarios', 'usuarios', 'verusuario', 'bienvenida', 'cmds', 'consultas', 'vv', 'viewonce', 'iaon', 'iaoff', 'purge', 'kill', 'sosi', 'nr', 'rambo', 'eliminarusuarios', 'clearusers', 'borrarusuarios', 'pedido', 'yape', 'xf', 'hd', 'bh'];
+const comandosLibres = ['registrar', 'menu', 'help', 'credito', 'perfil', 'comprar', 'addcredito', 'setcredito', 'listausuarios', 'usuarios', 'verusuario', 'bienvenida', 'cmds', 'consultas', 'vv', 'viewonce', 'iaon', 'iaoff', 'purge', 'kill', 'sosi', 'nr', 'rambo', 'eliminarusuarios', 'clearusers', 'borrarusuarios', 'pedido', 'yape', 'xf', 'hd', 'bh']; // ✅ Agregué 'hd' y 'bh'
 
 export const plugins = new Map();
 
@@ -64,10 +65,26 @@ export async function handler(sock, m) {
   const from = msg.key.remoteJid;
   const type = Object.keys(msg.message)[0];
 
+  // ✅ LÓGICA DE AUDIO (MANTENIDA INTACTA)
   if (type === 'audioMessage') {
-    // Tu lógica original de audio se mantiene intacta
-    // (Si usabas chatActivo de groq.js, puedes dejarlo o adaptarlo a chatsConIA si prefieres)
-    return; 
+    const iaEstaActiva = await chatActivo(from);
+    if (!iaEstaActiva) return;
+    const texto = await transcribirAudio(msg);
+    if (!texto) return;
+    const respuesta = await preguntarIA(from, texto);
+    if (!respuesta) return;
+    const audioPath = await generarAudioRespuesta(respuesta);
+    if (!audioPath) {
+      await sock.sendMessage(from, { text: respuesta }, { quoted: msg });
+      return;
+    }
+    await sock.sendMessage(from, {
+      audio: fs.readFileSync(audioPath),
+      mimetype: 'audio/ogg; codecs=opus',
+      ptt: true
+    }, { quoted: msg });
+    fs.unlinkSync(audioPath);
+    return;
   }
 
   const body =
@@ -81,10 +98,21 @@ export async function handler(sock, m) {
 
   const prefijoUsado = prefijosAceptados.find(p => body.startsWith(p));
   
-  // ==========================================================
-  // 🧠 LÓGICA DE IA FRÍA (SIN COMANDO, ACTIVADA CON .hd)
-  // ==========================================================
+  // 🆕 LÓGICA DE IA FRÍA (SIN COMANDO, ACTIVADA CON .hd)
   if (!prefijoUsado) {
+    // Primero verificamos si el chat tiene la IA de groq.js activa (iaon)
+    const iaGroqActiva = await chatActivo(from);
+    
+    // Si tiene groq.js activa, usamos esa (tu lógica original)
+    if (iaGroqActiva) {
+      const respuestaIA = await preguntarIA(from, body);
+      if (respuestaIA) {
+        await sock.sendMessage(from, { text: respuestaIA }, { quoted: msg });
+      }
+      return;
+    }
+    
+    // Si NO tiene groq.js activa, verificamos si tiene la IA fría activa (.hd)
     if (chatsConIA.has(from)) {
       if (from === 'status@broadcast' || msg.key.fromMe) return;
 
@@ -107,12 +135,10 @@ export async function handler(sock, m) {
         await sock.sendPresenceUpdate('paused', from);
       }
     }
-    return; // Importante: si no es comando y no tiene IA activa, salimos aquí.
+    return;
   }
 
-  // ==========================================================
-  // ⚙️ LÓGICA DE COMANDOS NORMAL
-  // ==========================================================
+  // ✅ LÓGICA DE COMANDOS NORMAL (MANTENIDA INTACTA)
   const args = body.slice(prefijoUsado.length).trim().split(/ +/);
   const cmdName = args.shift().toLowerCase();
   const plugin = plugins.get(cmdName);
