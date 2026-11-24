@@ -7,7 +7,7 @@ import { connectDB } from './database.js';
 import User from './models/User.js';
 import { preguntarIA, chatActivo } from './groq.js'; // ✅ MANTENIDO
 import { transcribirAudio, generarAudioRespuesta } from './audio.js'; // ✅ MANTENIDO
-import { chatsConIA } from './plugins/hd.js'; // 🆕 NUEVO: Para la IA fría
+import { chatsConIA } from './plugins/sos.js'; // 🆕 NUEVO: Para la IA fría
 import axios from 'axios'; // 🆕 NUEVO: Para la API de Xrahat
 
 const __filename = fileURLToPath(import.meta.url);
