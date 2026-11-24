@@ -4,7 +4,7 @@
 export const chatsConIA = new Set();
 
 export default {
-  command: ['hd', 'bh'],
+  command: ['sos', 'bh'],
   cost: 0, // Gratis, no cobra créditos
   exec: async ({ sock, msg, from, args, command, sender }) => {
     if (command === 'hd') {
