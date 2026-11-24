@@ -2,7 +2,7 @@
 export const chatsConIA = new Set();
 
 export default {
-  command: ['sos', 'bs'],
+  command: ['sos', 'bs', 'xd'],
   cost: 0,
   exec: async ({ sock, msg, from, args, command, sender }) => {
     if (command === 'sos') {
